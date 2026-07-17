@@ -6,6 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
 } from "recharts";
 import { addEntries, addEntry, clearEntries, deleteEntry, listEntries } from "@/lib/entries";
+import logo from "@/assets/nutrimilho-logo.png";
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -86,13 +87,8 @@ function App() {
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-leaf text-lg font-bold text-brand-yellow">
-              N
-            </div>
-            <div>
-              <p className="text-sm font-semibold leading-tight text-foreground">Nutrimilho</p>
-              <span className="hidden text-xs text-muted-foreground sm:inline">Controle de Produção Diária</span>
-            </div>
+            <img src={logo} alt="Nutrimilho" className="h-10 w-auto" />
+            <span className="hidden text-xs text-muted-foreground sm:inline">Controle de Produção Diária</span>
           </div>
           <nav className="flex gap-1 rounded-lg bg-muted p-1">
             {(["dashboard", "dados"] as const).map((t) => (
