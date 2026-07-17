@@ -489,6 +489,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
 
       {/* Chart 1 */}
       <section className="rounded-xl border bg-card p-6 shadow-sm">
+        <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
         <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Produção Diária por Produto</h2>
         <p className="mb-4 text-center text-xs text-muted-foreground">Agrupado por produto — cada cor representa uma data</p>
         <div style={{ width: "100%", height: 420 }}>
@@ -522,6 +523,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
 
       {/* Chart 2 */}
       <section className="rounded-xl border bg-card p-6 shadow-sm">
+        <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
         <h2 className="mb-4 text-center text-lg font-bold uppercase tracking-wide text-foreground">Total Diário</h2>
         <div style={{ width: "100%", height: 420 }}>
           <ResponsiveContainer>
@@ -571,7 +573,7 @@ function Stat({ label, value, tint }: { label: string; value: string; tint: "gre
       <div className={`h-1 ${bg}`} />
       <div className="p-5">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-        <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{value}</p>
+        <p className="mt-1 text-4xl font-bold tabular-nums text-foreground">{value}</p>
       </div>
     </div>
   );
