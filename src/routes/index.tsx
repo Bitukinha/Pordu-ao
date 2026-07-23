@@ -364,6 +364,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   const [mes, setMes] = useState<string>(""); // "" = todos, "01".."12"
   const [dtIni, setDtIni] = useState<string>("");
   const [dtFim, setDtFim] = useState<string>("");
+  const [categoriasSel, setCategoriasSel] = useState<string[]>([]); // [] = todas
 
   useEffect(() => {
     if (years.length && !years.includes(ano)) setAno(years[years.length - 1]);
@@ -376,9 +377,38 @@ function Dashboard({ entries }: { entries: Entry[] }) {
 
   const usaPeriodo = Boolean(dtIni || dtFim);
 
+  const hoje = new Date().toISOString().slice(0, 10);
+  const seteDiasAtras = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+  const anoAtual = String(new Date().getFullYear());
+  const mesAtual = String(new Date().getMonth() + 1).padStart(2, "0");
+  const presetSeteDias = usaPeriodo && dtIni === seteDiasAtras && dtFim === hoje;
+  const presetMensal = !usaPeriodo && ano === anoAtual && mes === mesAtual;
+  const presetAnual = !usaPeriodo && ano === anoAtual && mes === "";
+
+  function aplicarUltimos7Dias() {
+    setDtIni(seteDiasAtras);
+    setDtFim(hoje);
+  }
+  function aplicarMensal() {
+    setDtIni("");
+    setDtFim("");
+    setAno(years.includes(anoAtual) ? anoAtual : years[years.length - 1] ?? anoAtual);
+    setMes(mesAtual);
+  }
+  function aplicarAnual() {
+    setDtIni("");
+    setDtFim("");
+    setAno(years.includes(anoAtual) ? anoAtual : years[years.length - 1] ?? anoAtual);
+    setMes("");
+  }
+  function toggleCategoria(c: string) {
+    setCategoriasSel((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+  }
+
   const filtered = useMemo(
     () =>
       entries.filter((e) => {
+        if (categoriasSel.length && !categoriasSel.includes(e.categoria)) return false;
         if (usaPeriodo) {
           if (dtIni && e.data < dtIni) return false;
           if (dtFim && e.data > dtFim) return false;
@@ -388,7 +418,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
         if (mes && e.data.slice(5, 7) !== mes) return false;
         return true;
       }),
-    [entries, ano, mes, dtIni, dtFim, usaPeriodo]
+    [entries, ano, mes, dtIni, dtFim, usaPeriodo, categoriasSel]
   );
 
   const sortedDates = useMemo(
@@ -444,46 +474,99 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   return (
     <div className="space-y-6">
       {/* Filters */}
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4 shadow-sm">
-        <span className="text-xs font-semibold uppercase text-muted-foreground">Filtro</span>
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-xs text-muted-foreground">Ano</span>
-          <select
-            value={ano}
-            onChange={(e) => { setAno(e.target.value); setMes(""); setDtIni(""); setDtFim(""); }}
-            className={inputCls + " w-28"}
-            disabled={usaPeriodo}
+      <div className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase text-muted-foreground">Período rápido</span>
+          <button
+            onClick={aplicarUltimos7Dias}
+            className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+              presetSeteDias ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+            }`}
           >
-            {years.map((y) => <option key={y}>{y}</option>)}
-          </select>
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-xs text-muted-foreground">Mês</span>
-          <select
-            value={mes}
-            onChange={(e) => setMes(e.target.value)}
-            className={inputCls + " w-36"}
-            disabled={usaPeriodo}
+            Últimos 7 dias
+          </button>
+          <button
+            onClick={aplicarMensal}
+            className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+              presetMensal ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+            }`}
           >
-            <option value="">Todos</option>
-            {monthsForYear.map((m) => <option key={m} value={m}>{MESES[parseInt(m, 10) - 1]}</option>)}
-          </select>
-        </label>
-        <div className="mx-2 hidden h-8 w-px bg-border sm:block" />
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-xs text-muted-foreground">De</span>
-          <input type="date" value={dtIni} onChange={(e) => setDtIni(e.target.value)} className={inputCls + " w-40"} />
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-xs text-muted-foreground">Até</span>
-          <input type="date" value={dtFim} onChange={(e) => setDtFim(e.target.value)} className={inputCls + " w-40"} />
-        </label>
-        <button
-          onClick={() => { setMes(""); setDtIni(""); setDtFim(""); if (years.length) setAno(years[years.length - 1]); }}
-          className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline"
-        >
-          Limpar filtros
-        </button>
+            Mensal
+          </button>
+          <button
+            onClick={aplicarAnual}
+            className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+              presetAnual ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Anual
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <span className="text-xs font-semibold uppercase text-muted-foreground">Filtro</span>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-xs text-muted-foreground">Ano</span>
+            <select
+              value={ano}
+              onChange={(e) => { setAno(e.target.value); setMes(""); setDtIni(""); setDtFim(""); }}
+              className={inputCls + " w-28"}
+              disabled={usaPeriodo}
+            >
+              {years.map((y) => <option key={y}>{y}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-xs text-muted-foreground">Mês</span>
+            <select
+              value={mes}
+              onChange={(e) => setMes(e.target.value)}
+              className={inputCls + " w-36"}
+              disabled={usaPeriodo}
+            >
+              <option value="">Todos</option>
+              {monthsForYear.map((m) => <option key={m} value={m}>{MESES[parseInt(m, 10) - 1]}</option>)}
+            </select>
+          </label>
+          <div className="mx-2 hidden h-8 w-px bg-border sm:block" />
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-xs text-muted-foreground">De</span>
+            <input type="date" value={dtIni} onChange={(e) => setDtIni(e.target.value)} className={inputCls + " w-40"} />
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-xs text-muted-foreground">Até</span>
+            <input type="date" value={dtFim} onChange={(e) => setDtFim(e.target.value)} className={inputCls + " w-40"} />
+          </label>
+          <button
+            onClick={() => { setMes(""); setDtIni(""); setDtFim(""); setCategoriasSel([]); if (years.length) setAno(years[years.length - 1]); }}
+            className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline"
+          >
+            Limpar filtros
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+          <span className="text-xs font-semibold uppercase text-muted-foreground">Categoria</span>
+          <button
+            onClick={() => setCategoriasSel([])}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+              categoriasSel.length === 0 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Todas
+          </button>
+          {CATEGORIAS.map((c) => (
+            <button
+              key={c}
+              onClick={() => toggleCategoria(c)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                categoriasSel.includes(c) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
