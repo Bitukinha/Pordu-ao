@@ -83,11 +83,11 @@ function App() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <img src={logo} alt="Nutrimilho" className="h-10 w-auto" />
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <img src={logo} alt="Nutrimilho" className="h-8 w-auto sm:h-10" />
             <span className="hidden text-xs text-muted-foreground sm:inline">Controle de Produção Diária</span>
           </div>
           <nav className="flex gap-1 rounded-lg bg-muted p-1">
@@ -95,7 +95,7 @@ function App() {
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
+                className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition sm:px-4 sm:text-sm ${
                   tab === t ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -106,7 +106,7 @@ function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
         {isLoading ? (
           <p className="py-12 text-center text-sm text-muted-foreground">Carregando...</p>
         ) : tab === "dashboard" ? (
@@ -121,6 +121,12 @@ function App() {
           />
         )}
       </main>
+
+      <footer className="border-t bg-white py-4">
+        <p className="px-4 text-center text-xs text-muted-foreground">
+          © 2026 Nutrimilho - (Novaes Tech) | Todos os direitos reservados
+        </p>
+      </footer>
     </div>
   );
 }
