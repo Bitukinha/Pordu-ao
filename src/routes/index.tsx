@@ -2,13 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
 } from "recharts";
 import { addEntries, addEntry, clearEntries, deleteEntry, listEntries } from "@/lib/entries";
-import { addOrder, addOrderLog, deleteOrder, deleteOrderLog, listOrders } from "@/lib/orders";
 import logo from "@/assets/nutrimilho-logo.png";
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -31,30 +28,6 @@ type Entry = {
 };
 
 type NewEntry = Omit<Entry, "id">;
-
-type Embalagem = "big_bag" | "saco";
-
-type Order = {
-  id: string;
-  produto: string;
-  embalagem: Embalagem;
-  quantidadeAlvo: number;
-  createdAt: string;
-};
-
-type NewOrder = Omit<Order, "id" | "createdAt">;
-
-type OrderLog = {
-  id: string;
-  orderId: string;
-  data: string;
-  turno: string;
-  quantidade: number;
-};
-
-type NewOrderLog = Omit<OrderLog, "id">;
-
-const TURNOS = ["1º Turno", "2º Turno", "3º Turno"];
 
 const CATEGORIAS = ["Extrusão", "Flotação", "Exportação", "Germen", "Mercado interno", "Milho"];
 const PRODUTOS = [
@@ -80,7 +53,7 @@ function fmt(n: number) {
 }
 
 function App() {
-  const [tab, setTab] = useState<"dashboard" | "dados" | "ordens">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "dados">("dashboard");
   const queryClient = useQueryClient();
 
   const { data: entries = [], isLoading } = useQuery({
@@ -88,19 +61,8 @@ function App() {
     queryFn: () => listEntries(),
   });
 
-  const { data: ordersData, isLoading: ordersLoading } = useQuery({
-    queryKey: ["orders"],
-    queryFn: () => listOrders(),
-  });
-  const orders = ordersData?.orders ?? [];
-  const orderLogs = ordersData?.logs ?? [];
-
   function invalidate() {
     return queryClient.invalidateQueries({ queryKey: ["entries"] });
-  }
-
-  function invalidateOrders() {
-    return queryClient.invalidateQueries({ queryKey: ["orders"] });
   }
 
   const addMutation = useMutation({
@@ -120,23 +82,6 @@ function App() {
     onSuccess: invalidate,
   });
 
-  const addOrderMutation = useMutation({
-    mutationFn: (order: NewOrder) => addOrder({ data: order }),
-    onSuccess: invalidateOrders,
-  });
-  const removeOrderMutation = useMutation({
-    mutationFn: (id: string) => deleteOrder({ data: { id } }),
-    onSuccess: invalidateOrders,
-  });
-  const addOrderLogMutation = useMutation({
-    mutationFn: (log: NewOrderLog) => addOrderLog({ data: log }),
-    onSuccess: invalidateOrders,
-  });
-  const removeOrderLogMutation = useMutation({
-    mutationFn: (id: string) => deleteOrderLog({ data: { id } }),
-    onSuccess: invalidateOrders,
-  });
-
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b bg-white">
@@ -146,7 +91,7 @@ function App() {
             <span className="hidden text-xs text-muted-foreground sm:inline">Controle de Produção Diária</span>
           </div>
           <nav className="flex gap-1 rounded-lg bg-muted p-1">
-            {(["dashboard", "dados", "ordens"] as const).map((t) => (
+            {(["dashboard", "dados"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -154,7 +99,7 @@ function App() {
                   tab === t ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {t === "dashboard" ? "Indicadores" : t === "dados" ? "Lançar Dados" : "Ordens"}
+                {t === "dashboard" ? "Indicadores" : "Lançar Dados"}
               </button>
             ))}
           </nav>
@@ -162,34 +107,17 @@ function App() {
       </header>
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
-        {tab === "dashboard" ? (
-          isLoading ? (
-            <p className="py-12 text-center text-sm text-muted-foreground">Carregando...</p>
-          ) : (
-            <Dashboard entries={entries} />
-          )
-        ) : tab === "dados" ? (
-          isLoading ? (
-            <p className="py-12 text-center text-sm text-muted-foreground">Carregando...</p>
-          ) : (
-            <DataEntry
-              entries={entries}
-              onAdd={(entry) => addMutation.mutateAsync(entry)}
-              onImport={(imported) => addManyMutation.mutateAsync(imported)}
-              onRemove={(id) => removeMutation.mutateAsync(id)}
-              onClear={() => clearMutation.mutateAsync()}
-            />
-          )
-        ) : ordersLoading ? (
+        {isLoading ? (
           <p className="py-12 text-center text-sm text-muted-foreground">Carregando...</p>
+        ) : tab === "dashboard" ? (
+          <Dashboard entries={entries} />
         ) : (
-          <Orders
-            orders={orders}
-            logs={orderLogs}
-            onAddOrder={(order) => addOrderMutation.mutateAsync(order)}
-            onDeleteOrder={(id) => removeOrderMutation.mutateAsync(id)}
-            onAddLog={(log) => addOrderLogMutation.mutateAsync(log)}
-            onDeleteLog={(id) => removeOrderLogMutation.mutateAsync(id)}
+          <DataEntry
+            entries={entries}
+            onAdd={(entry) => addMutation.mutateAsync(entry)}
+            onImport={(imported) => addManyMutation.mutateAsync(imported)}
+            onRemove={(id) => removeMutation.mutateAsync(id)}
+            onClear={() => clearMutation.mutateAsync()}
           />
         )}
       </main>
@@ -409,242 +337,6 @@ function DataEntry({
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-/* -------------------- ORDENS DE PRODUÇÃO -------------------- */
-const EMBALAGEM_LABEL: Record<Embalagem, { singular: string; plural: string }> = {
-  big_bag: { singular: "Big Bag", plural: "Big Bags" },
-  saco: { singular: "Saco", plural: "Sacos" },
-};
-
-function generateOrderPdf(order: Order, logs: OrderLog[]) {
-  const total = logs.reduce((s, l) => s + l.quantidade, 0);
-  const pct = order.quantidadeAlvo > 0 ? (total / order.quantidadeAlvo) * 100 : 0;
-  const { plural } = EMBALAGEM_LABEL[order.embalagem];
-  const sorted = logs.slice().sort((a, b) => a.data.localeCompare(b.data));
-
-  const doc = new jsPDF();
-  doc.setFontSize(16);
-  doc.text("Nutrimilho - Ordem de Produção", 14, 18);
-  doc.setFontSize(11);
-  doc.text(`Produto: ${order.produto}`, 14, 28);
-  doc.text(`Embalagem: ${plural}`, 14, 35);
-  doc.text(`Meta: ${fmt(order.quantidadeAlvo)} ${plural}`, 14, 42);
-  doc.text(`Total produzido: ${fmt(total)} ${plural} (${fmt(pct)}%)`, 14, 49);
-  doc.text(`Status: ${pct >= 100 ? "Completo" : "Em produção"}`, 14, 56);
-  doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, 14, 63);
-
-  autoTable(doc, {
-    startY: 71,
-    head: [["Data", "Turno", `Qte (${plural})`]],
-    body: sorted.map((l) => [
-      new Date(l.data + "T00:00").toLocaleDateString("pt-BR"),
-      l.turno,
-      fmt(l.quantidade),
-    ]),
-  });
-
-  doc.save(`ordem-${order.produto.replace(/\s+/g, "_").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`);
-}
-
-function Orders({
-  orders,
-  logs,
-  onAddOrder,
-  onDeleteOrder,
-  onAddLog,
-  onDeleteLog,
-}: {
-  orders: Order[];
-  logs: OrderLog[];
-  onAddOrder: (order: NewOrder) => Promise<unknown>;
-  onDeleteOrder: (id: string) => Promise<unknown>;
-  onAddLog: (log: NewOrderLog) => Promise<unknown>;
-  onDeleteLog: (id: string) => Promise<unknown>;
-}) {
-  const [produto, setProduto] = useState(PRODUTOS[0]);
-  const [embalagem, setEmbalagem] = useState<Embalagem>("big_bag");
-  const [quantidadeAlvo, setQuantidadeAlvo] = useState("");
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const n = parseFloat(quantidadeAlvo.replace(",", "."));
-    if (!produto || isNaN(n) || n <= 0) return;
-    await onAddOrder({ produto, embalagem, quantidadeAlvo: n });
-    setQuantidadeAlvo("");
-  }
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-      <section className="rounded-xl border bg-card p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold">Nova Ordem de Produção</h2>
-        <form onSubmit={submit} className="space-y-4">
-          <Field label="Produto">
-            <select value={produto} onChange={(e) => setProduto(e.target.value)} className={inputCls}>
-              {PRODUTOS.map((p) => <option key={p}>{p}</option>)}
-            </select>
-          </Field>
-          <Field label="Embalagem">
-            <select value={embalagem} onChange={(e) => setEmbalagem(e.target.value as Embalagem)} className={inputCls}>
-              <option value="big_bag">Big Bag</option>
-              <option value="saco">Saco</option>
-            </select>
-          </Field>
-          <Field label={`Meta (quantidade de ${EMBALAGEM_LABEL[embalagem].plural.toLowerCase()})`}>
-            <input
-              type="text" inputMode="decimal" value={quantidadeAlvo}
-              onChange={(e) => setQuantidadeAlvo(e.target.value)}
-              placeholder="0" className={inputCls} required
-            />
-          </Field>
-          <button type="submit" className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90">
-            Criar Ordem
-          </button>
-        </form>
-      </section>
-
-      <section className="rounded-xl border bg-card p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold">Ordens ({orders.length})</h2>
-        {orders.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">Nenhuma ordem ainda.</p>
-        ) : (
-          <div className="space-y-4">
-            {orders.map((o) => (
-              <OrderCard
-                key={o.id}
-                order={o}
-                logs={logs.filter((l) => l.orderId === o.id)}
-                onAddLog={onAddLog}
-                onDeleteOrder={onDeleteOrder}
-                onDeleteLog={onDeleteLog}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function OrderCard({
-  order,
-  logs,
-  onAddLog,
-  onDeleteOrder,
-  onDeleteLog,
-}: {
-  order: Order;
-  logs: OrderLog[];
-  onAddLog: (log: NewOrderLog) => Promise<unknown>;
-  onDeleteOrder: (id: string) => Promise<unknown>;
-  onDeleteLog: (id: string) => Promise<unknown>;
-}) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [showForm, setShowForm] = useState(false);
-  const [data, setData] = useState(today);
-  const [turno, setTurno] = useState(TURNOS[0]);
-  const [quantidade, setQuantidade] = useState("");
-
-  const total = logs.reduce((s, l) => s + l.quantidade, 0);
-  const pct = order.quantidadeAlvo > 0 ? (total / order.quantidadeAlvo) * 100 : 0;
-  const barPct = Math.min(pct, 100);
-  const completo = pct >= 100;
-  const { plural } = EMBALAGEM_LABEL[order.embalagem];
-
-  async function submitLog(e: React.FormEvent) {
-    e.preventDefault();
-    const n = parseFloat(quantidade.replace(",", "."));
-    if (!data || !turno || isNaN(n) || n <= 0) return;
-    await onAddLog({ orderId: order.id, data, turno, quantidade: n });
-    setQuantidade("");
-  }
-
-  async function excluirOrdem() {
-    if (confirm("Excluir esta ordem e todos os lançamentos dela?")) await onDeleteOrder(order.id);
-  }
-
-  return (
-    <div className="rounded-lg border p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="font-semibold text-foreground">{order.produto}</p>
-          <p className="text-xs text-muted-foreground">{plural} • Meta: {fmt(order.quantidadeAlvo)} {plural.toLowerCase()}</p>
-        </div>
-        <div className="flex shrink-0 gap-3">
-          <button onClick={() => generateOrderPdf(order, logs)} className="text-xs font-medium text-primary hover:underline">
-            Gerar PDF
-          </button>
-          <button onClick={excluirOrdem} className="text-xs text-destructive hover:underline">Excluir</button>
-        </div>
-      </div>
-
-      <div className="mt-3">
-        <div className="mb-1 flex items-center justify-between text-xs">
-          <span className={completo ? "font-semibold text-brand-leaf" : "text-muted-foreground"}>
-            {completo ? "Completo" : "Em produção"}
-          </span>
-          <span className="font-medium tabular-nums">
-            {fmt(total)} / {fmt(order.quantidadeAlvo)} {plural.toLowerCase()} ({fmt(pct)}%)
-          </span>
-        </div>
-        <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
-          <div
-            className={`h-full rounded-full transition-all ${completo ? "bg-brand-leaf" : "bg-primary"}`}
-            style={{ width: `${barPct}%` }}
-          />
-        </div>
-      </div>
-
-      <div className="mt-3">
-        <button onClick={() => setShowForm((s) => !s)} className="text-xs font-medium text-primary hover:underline">
-          {showForm ? "Cancelar" : "+ Lançar produção"}
-        </button>
-        {showForm && (
-          <form onSubmit={submitLog} className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <input type="date" value={data} onChange={(e) => setData(e.target.value)} className={inputCls} required />
-            <select value={turno} onChange={(e) => setTurno(e.target.value)} className={inputCls}>
-              {TURNOS.map((t) => <option key={t}>{t}</option>)}
-            </select>
-            <input
-              type="text" inputMode="decimal" value={quantidade}
-              onChange={(e) => setQuantidade(e.target.value)}
-              placeholder={`Qte (${plural.toLowerCase()})`} className={inputCls} required
-            />
-            <button type="submit" className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90">
-              Adicionar
-            </button>
-          </form>
-        )}
-      </div>
-
-      {logs.length > 0 && (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b text-left uppercase text-muted-foreground">
-                <th className="py-1 pr-3">Data</th>
-                <th className="py-1 pr-3">Turno</th>
-                <th className="py-1 pr-3 text-right">Qte</th>
-                <th className="py-1"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.slice().sort((a, b) => a.data.localeCompare(b.data)).map((l) => (
-                <tr key={l.id} className="border-b last:border-0">
-                  <td className="py-1 pr-3">{new Date(l.data + "T00:00").toLocaleDateString("pt-BR")}</td>
-                  <td className="py-1 pr-3">{l.turno}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums">{fmt(l.quantidade)}</td>
-                  <td className="py-1 text-right">
-                    <button onClick={() => onDeleteLog(l.id)} className="text-destructive hover:underline">Excluir</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
