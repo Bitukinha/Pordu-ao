@@ -353,6 +353,25 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+const FILTRO_STORAGE_KEY = "nutrimilho:dashboard-filtro";
+
+type FiltroSalvo = {
+  ano?: string;
+  mes?: string;
+  dtIni?: string;
+  dtFim?: string;
+  categoriasSel?: string[];
+};
+
+function carregarFiltroSalvo(): FiltroSalvo {
+  try {
+    const raw = localStorage.getItem(FILTRO_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 /* -------------------- DASHBOARD -------------------- */
 function Dashboard({ entries }: { entries: Entry[] }) {
   // Available years/months from data
@@ -360,15 +379,46 @@ function Dashboard({ entries }: { entries: Entry[] }) {
     () => Array.from(new Set(entries.map((e) => e.data.slice(0, 4)))).sort(),
     [entries]
   );
-  const [ano, setAno] = useState<string>("");
-  const [mes, setMes] = useState<string>(""); // "" = todos, "01".."12"
-  const [dtIni, setDtIni] = useState<string>("");
-  const [dtFim, setDtFim] = useState<string>("");
-  const [categoriasSel, setCategoriasSel] = useState<string[]>([]); // [] = todas
+
+  const filtroSalvoRef = useRef<FiltroSalvo | null>(null);
+  if (filtroSalvoRef.current === null) filtroSalvoRef.current = carregarFiltroSalvo();
+  const filtroSalvo = filtroSalvoRef.current;
+  const tinhaFiltroSalvo = Object.keys(filtroSalvo).length > 0;
+  const defaultMensalAplicadoRef = useRef(false);
+
+  const [ano, setAno] = useState<string>(filtroSalvo.ano ?? "");
+  const [mes, setMes] = useState<string>(filtroSalvo.mes ?? ""); // "" = todos, "01".."12"
+  const [dtIni, setDtIni] = useState<string>(filtroSalvo.dtIni ?? "");
+  const [dtFim, setDtFim] = useState<string>(filtroSalvo.dtFim ?? "");
+  const [categoriasSel, setCategoriasSel] = useState<string[]>(filtroSalvo.categoriasSel ?? []); // [] = todas
+
+  const anoAtualInicial = String(new Date().getFullYear());
+  const mesAtualInicial = String(new Date().getMonth() + 1).padStart(2, "0");
 
   useEffect(() => {
     if (years.length && !years.includes(ano)) setAno(years[years.length - 1]);
   }, [years, ano]);
+
+  // Filtro padrão sempre "Mensal" quando não há filtro salvo do usuário
+  useEffect(() => {
+    if (tinhaFiltroSalvo || defaultMensalAplicadoRef.current) return;
+    if (!years.length) return;
+    defaultMensalAplicadoRef.current = true;
+    setAno(years.includes(anoAtualInicial) ? anoAtualInicial : years[years.length - 1]);
+    setMes(mesAtualInicial);
+  }, [years, tinhaFiltroSalvo, anoAtualInicial, mesAtualInicial]);
+
+  // Persiste o filtro atual para a próxima visita
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        FILTRO_STORAGE_KEY,
+        JSON.stringify({ ano, mes, dtIni, dtFim, categoriasSel })
+      );
+    } catch {
+      // ignore
+    }
+  }, [ano, mes, dtIni, dtFim, categoriasSel]);
 
   const monthsForYear = useMemo(() => {
     const s = new Set(entries.filter((e) => e.data.startsWith(ano)).map((e) => e.data.slice(5, 7)));
@@ -381,10 +431,15 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   const seteDiasAtras = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
   const anoAtual = String(new Date().getFullYear());
   const mesAtual = String(new Date().getMonth() + 1).padStart(2, "0");
+  const presetDiaria = usaPeriodo && dtIni === hoje && dtFim === hoje;
   const presetSeteDias = usaPeriodo && dtIni === seteDiasAtras && dtFim === hoje;
   const presetMensal = !usaPeriodo && ano === anoAtual && mes === mesAtual;
   const presetAnual = !usaPeriodo && ano === anoAtual && mes === "";
 
+  function aplicarDiaria() {
+    setDtIni(hoje);
+    setDtFim(hoje);
+  }
   function aplicarUltimos7Dias() {
     setDtIni(seteDiasAtras);
     setDtFim(hoje);
@@ -462,6 +517,50 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   const grandTotal = chart2.reduce((s, r) => s + (r.__total as number), 0);
   const activeCats = CATEGORIAS.filter((c) => chart2.some((r) => r[c]));
 
+  // Entradas filtradas apenas por categoria (ignora período/ano/mês) para os comparativos gerais
+  const porCategoria = useMemo(
+    () => entries.filter((e) => !categoriasSel.length || categoriasSel.includes(e.categoria)),
+    [entries, categoriasSel]
+  );
+
+  // Chart 3: Comparativo mensal — total por mês do ano selecionado, série = categoria
+  const chart3 = useMemo(() => {
+    const doAno = porCategoria.filter((e) => e.data.startsWith(ano));
+    return MESES.map((label, idx) => {
+      const mKey = String(idx + 1).padStart(2, "0");
+      const row: Record<string, string | number> = { mes: label };
+      let total = 0;
+      for (const c of CATEGORIAS) {
+        const v = doAno
+          .filter((e) => e.data.slice(5, 7) === mKey && e.categoria === c)
+          .reduce((s, e) => s + e.qteTon, 0);
+        if (v) row[c] = v;
+        total += v;
+      }
+      row.__total = total;
+      return row;
+    });
+  }, [porCategoria, ano]);
+  const activeCatsChart3 = CATEGORIAS.filter((c) => chart3.some((r) => r[c]));
+
+  // Chart 4: Comparativo anual — total por ano, série = categoria
+  const chart4 = useMemo(() => {
+    return years.map((y) => {
+      const row: Record<string, string | number> = { ano: y };
+      let total = 0;
+      for (const c of CATEGORIAS) {
+        const v = porCategoria
+          .filter((e) => e.data.startsWith(y) && e.categoria === c)
+          .reduce((s, e) => s + e.qteTon, 0);
+        if (v) row[c] = v;
+        total += v;
+      }
+      row.__total = total;
+      return row;
+    });
+  }, [porCategoria, years]);
+  const activeCatsChart4 = CATEGORIAS.filter((c) => chart4.some((r) => r[c]));
+
   if (entries.length === 0) {
     return (
       <div className="rounded-xl border-2 border-dashed bg-card p-16 text-center">
@@ -477,6 +576,14 @@ function Dashboard({ entries }: { entries: Entry[] }) {
       <div className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold uppercase text-muted-foreground">Período rápido</span>
+          <button
+            onClick={aplicarDiaria}
+            className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+              presetDiaria ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Diária
+          </button>
           <button
             onClick={aplicarUltimos7Dias}
             className={`rounded-md px-3 py-1 text-xs font-medium transition ${
@@ -630,6 +737,58 @@ function Dashboard({ entries }: { entries: Entry[] }) {
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               {activeCats.map((c) => (
+                <Bar key={c} dataKey={c} stackId="a" fill={CAT_COLORS[c]}>
+                  <LabelList dataKey={c} position="center" style={{ fontSize: 10, fill: "#fff", fontWeight: 600 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                </Bar>
+              ))}
+              <Bar dataKey="__total" fill="transparent" legendType="none">
+                <LabelList dataKey="__total" position="top" style={{ fontSize: 11, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+
+      {/* Chart 3: Comparativo Mensal */}
+      <section className="rounded-xl border bg-card p-6 shadow-sm">
+        <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
+        <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Comparativo Mensal — {ano}</h2>
+        <p className="mb-4 text-center text-xs text-muted-foreground">Total de produção por mês do ano selecionado (independe do filtro de período)</p>
+        <div style={{ width: "100%", height: 380 }}>
+          <ResponsiveContainer>
+            <BarChart data={chart3} margin={{ top: 32, right: 16, left: 0, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+              <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip formatter={(v: number) => fmt(v) + " Ton"} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              {activeCatsChart3.map((c) => (
+                <Bar key={c} dataKey={c} stackId="a" fill={CAT_COLORS[c]}>
+                  <LabelList dataKey={c} position="center" style={{ fontSize: 10, fill: "#fff", fontWeight: 600 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                </Bar>
+              ))}
+              <Bar dataKey="__total" fill="transparent" legendType="none">
+                <LabelList dataKey="__total" position="top" style={{ fontSize: 11, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+
+      {/* Chart 4: Comparativo Anual */}
+      <section className="rounded-xl border bg-card p-6 shadow-sm">
+        <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
+        <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Comparativo Anual</h2>
+        <p className="mb-4 text-center text-xs text-muted-foreground">Total de produção por ano (independe do filtro de período)</p>
+        <div style={{ width: "100%", height: 380 }}>
+          <ResponsiveContainer>
+            <BarChart data={chart4} margin={{ top: 32, right: 16, left: 0, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+              <XAxis dataKey="ano" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip formatter={(v: number) => fmt(v) + " Ton"} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              {activeCatsChart4.map((c) => (
                 <Bar key={c} dataKey={c} stackId="a" fill={CAT_COLORS[c]}>
                   <LabelList dataKey={c} position="center" style={{ fontSize: 10, fill: "#fff", fontWeight: 600 }} formatter={(v: number) => (v ? fmt(v) : "")} />
                 </Bar>
