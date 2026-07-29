@@ -543,36 +543,14 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   }, [porCategoria, ano]);
   const activeCatsChart3 = CATEGORIAS.filter((c) => chart3.some((r) => r[c]));
 
-  // Chart 4: Comparativo anual — de 2023 até o ano atual, sem Milho, série = categoria
-  const anoAtualStr = String(new Date().getFullYear());
-  const categoriasChart4 = CATEGORIAS.filter((c) => c !== "Milho");
-  const anosChart4 = useMemo(
-    () => years.filter((y) => y >= "2023" && y <= anoAtualStr),
-    [years, anoAtualStr]
-  );
+  // Chart 4: Recordes de produção diária — melhor dia de cada mês do ano selecionado
   const chart4 = useMemo(() => {
-    return anosChart4.map((y) => {
-      const row: Record<string, string | number> = { ano: y };
-      let total = 0;
-      for (const c of categoriasChart4) {
-        const v = porCategoria
-          .filter((e) => e.data.startsWith(y) && e.categoria === c)
-          .reduce((s, e) => s + e.qteTon, 0);
-        if (v) row[c] = v;
-        total += v;
-      }
-      row.__total = total;
-      return row;
-    });
-  }, [porCategoria, anosChart4]);
-  const activeCatsChart4 = categoriasChart4.filter((c) => chart4.some((r) => r[c]));
-
-  // Chart 5: Recordes de produção diária — melhor dia de cada ano, de 2023 até o ano atual
-  const chart5 = useMemo(() => {
-    return anosChart4.map((y) => {
-      const doAno = porCategoria.filter((e) => e.data.startsWith(y));
+    const doAno = porCategoria.filter((e) => e.data.startsWith(ano));
+    return MESES.map((label, idx) => {
+      const mKey = String(idx + 1).padStart(2, "0");
+      const doMes = doAno.filter((e) => e.data.slice(5, 7) === mKey);
       const porDia = new Map<string, number>();
-      for (const e of doAno) porDia.set(e.data, (porDia.get(e.data) ?? 0) + e.qteTon);
+      for (const e of doMes) porDia.set(e.data, (porDia.get(e.data) ?? 0) + e.qteTon);
       let recorde = 0;
       let dataRecorde = "";
       for (const [d, v] of porDia) {
@@ -581,9 +559,9 @@ function Dashboard({ entries }: { entries: Entry[] }) {
           dataRecorde = d;
         }
       }
-      return { ano: y, recorde, dataRecorde };
+      return { mes: label, recorde, dataRecorde };
     });
-  }, [porCategoria, anosChart4]);
+  }, [porCategoria, ano]);
 
   if (entries.length === 0) {
     return (
@@ -712,32 +690,39 @@ function Dashboard({ entries }: { entries: Entry[] }) {
         <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
         <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Produção Diária por Produto</h2>
         <p className="mb-4 text-center text-xs text-muted-foreground">Agrupado por produto — cada cor representa uma data</p>
-        <div style={{ width: "100%", height: 420 }}>
-          <ResponsiveContainer>
-            <BarChart data={chart1} margin={{ top: 24, right: 16, left: 0, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-              <XAxis
-                dataKey="produto"
-                tick={(props) => <TwoLineTick {...props} row={chart1[props.index]} />}
-                interval={0}
-                height={60}
-              />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip
-                formatter={(v: number) => fmt(v) + " Ton"}
-                labelFormatter={(_, p) => {
-                  const r = p?.[0]?.payload as any;
-                  return r ? `${r.categoria} — ${r.produto}` : "";
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v) => new Date(v + "T00:00").toLocaleDateString("pt-BR")} />
-              {sortedDates.map((d, i) => (
-                <Bar key={d} dataKey={d} fill={DATE_PALETTE[i % DATE_PALETTE.length]}>
-                  <LabelList dataKey={d} position="top" style={{ fontSize: 10 }} formatter={(v: number) => (v ? fmt(v) : "")} />
-                </Bar>
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="w-full overflow-x-auto">
+          <div style={{ minWidth: Math.max(760, chart1.length * Math.max(sortedDates.length, 1) * 30), height: 440 }}>
+            <ResponsiveContainer>
+              <BarChart data={chart1} margin={{ top: 28, right: 16, left: 0, bottom: 40 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                <XAxis
+                  dataKey="produto"
+                  tick={(props) => <TwoLineTick {...props} row={chart1[props.index]} />}
+                  interval={0}
+                  height={60}
+                />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip
+                  formatter={(v: number) => fmt(v) + " Ton"}
+                  labelFormatter={(_, p) => {
+                    const r = p?.[0]?.payload as any;
+                    return r ? `${r.categoria} — ${r.produto}` : "";
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v) => new Date(v + "T00:00").toLocaleDateString("pt-BR")} />
+                {sortedDates.map((d, i) => (
+                  <Bar key={d} dataKey={d} fill={DATE_PALETTE[i % DATE_PALETTE.length]}>
+                    <LabelList
+                      dataKey={d}
+                      position="top"
+                      style={{ fontSize: 11, fontWeight: 600 }}
+                      formatter={(v: number) => (v ? fmt(v) : "")}
+                    />
+                  </Bar>
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </section>
 
@@ -745,31 +730,33 @@ function Dashboard({ entries }: { entries: Entry[] }) {
       <section className="rounded-xl border bg-card p-6 shadow-sm">
         <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
         <h2 className="mb-4 text-center text-lg font-bold uppercase tracking-wide text-foreground">Total Diário</h2>
-        <div style={{ width: "100%", height: 420 }}>
-          <ResponsiveContainer>
-            <BarChart data={chart2} margin={{ top: 32, right: 16, left: 0, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-              <XAxis
-                dataKey="data"
-                tick={{ fontSize: 11 }}
-                tickFormatter={(v) => new Date(v + "T00:00").toLocaleDateString("pt-BR")}
-              />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip
-                formatter={(v: number) => fmt(v) + " Ton"}
-                labelFormatter={(v) => new Date(v + "T00:00").toLocaleDateString("pt-BR")}
-              />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              {activeCats.map((c) => (
-                <Bar key={c} dataKey={c} stackId="a" fill={CAT_COLORS[c]}>
-                  <LabelList dataKey={c} position="center" style={{ fontSize: 10, fill: "#fff", fontWeight: 600 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+        <div className="w-full overflow-x-auto">
+          <div style={{ minWidth: Math.max(760, sortedDates.length * 70), height: 440 }}>
+            <ResponsiveContainer>
+              <BarChart data={chart2} margin={{ top: 34, right: 16, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                <XAxis
+                  dataKey="data"
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(v) => new Date(v + "T00:00").toLocaleDateString("pt-BR")}
+                />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip
+                  formatter={(v: number) => fmt(v) + " Ton"}
+                  labelFormatter={(v) => new Date(v + "T00:00").toLocaleDateString("pt-BR")}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {activeCats.map((c) => (
+                  <Bar key={c} dataKey={c} stackId="a" fill={CAT_COLORS[c]}>
+                    <LabelList dataKey={c} position="center" style={{ fontSize: 12, fill: "#fff", fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                  </Bar>
+                ))}
+                <Bar dataKey="__total" fill="transparent" legendType="none">
+                  <LabelList dataKey="__total" position="top" style={{ fontSize: 13, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
                 </Bar>
-              ))}
-              <Bar dataKey="__total" fill="transparent" legendType="none">
-                <LabelList dataKey="__total" position="top" style={{ fontSize: 11, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </section>
 
@@ -778,64 +765,38 @@ function Dashboard({ entries }: { entries: Entry[] }) {
         <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
         <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Comparativo Mensal — {ano}</h2>
         <p className="mb-4 text-center text-xs text-muted-foreground">Total de produção por mês do ano selecionado (independe do filtro de período)</p>
-        <div style={{ width: "100%", height: 380 }}>
+        <div style={{ width: "100%", height: 400 }}>
           <ResponsiveContainer>
-            <BarChart data={chart3} margin={{ top: 32, right: 16, left: 0, bottom: 20 }}>
+            <BarChart data={chart3} margin={{ top: 34, right: 16, left: 0, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-              <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
+              <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
               <Tooltip formatter={(v: number) => fmt(v) + " Ton"} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               {activeCatsChart3.map((c) => (
                 <Bar key={c} dataKey={c} stackId="a" fill={CAT_COLORS[c]}>
-                  <LabelList dataKey={c} position="center" style={{ fontSize: 10, fill: "#fff", fontWeight: 600 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                  <LabelList dataKey={c} position="center" style={{ fontSize: 12, fill: "#fff", fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
                 </Bar>
               ))}
               <Bar dataKey="__total" fill="transparent" legendType="none">
-                <LabelList dataKey="__total" position="top" style={{ fontSize: 11, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                <LabelList dataKey="__total" position="top" style={{ fontSize: 13, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
       </section>
 
-      {/* Chart 4: Comparativo Anual */}
+      {/* Chart 4: Recorde de Produção Diária */}
       <section className="rounded-xl border bg-card p-6 shadow-sm">
         <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
-        <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Comparativo Anual</h2>
-        <p className="mb-4 text-center text-xs text-muted-foreground">Total de produção por ano, de 2023 até o ano atual, exceto Milho (independe do filtro de período)</p>
+        <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Recorde de Produção Diária — {ano}</h2>
+        <p className="mb-4 text-center text-xs text-muted-foreground">Maior produção em um único dia por mês do ano selecionado — respeita o filtro de categoria</p>
         <div style={{ width: "100%", height: 380 }}>
           <ResponsiveContainer>
             <BarChart data={chart4} margin={{ top: 32, right: 16, left: 0, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-              <XAxis dataKey="ano" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v: number) => fmt(v) + " Ton"} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              {activeCatsChart4.map((c) => (
-                <Bar key={c} dataKey={c} stackId="a" fill={CAT_COLORS[c]}>
-                  <LabelList dataKey={c} position="center" style={{ fontSize: 10, fill: "#fff", fontWeight: 600 }} formatter={(v: number) => (v ? fmt(v) : "")} />
-                </Bar>
-              ))}
-              <Bar dataKey="__total" fill="transparent" legendType="none">
-                <LabelList dataKey="__total" position="top" style={{ fontSize: 11, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
-
-      {/* Chart 5: Recordes de Produção Diária */}
-      <section className="rounded-xl border bg-card p-6 shadow-sm">
-        <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
-        <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Recorde de Produção Diária por Ano</h2>
-        <p className="mb-4 text-center text-xs text-muted-foreground">Maior produção em um único dia, de 2023 até o ano atual — respeita o filtro de categoria</p>
-        <div style={{ width: "100%", height: 380 }}>
-          <ResponsiveContainer>
-            <BarChart data={chart5} margin={{ top: 32, right: 16, left: 0, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-              <XAxis dataKey="ano" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
+              <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
               <Tooltip
                 formatter={(v: number) => fmt(v) + " Ton"}
                 labelFormatter={(v, p) => {
@@ -845,7 +806,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
                 }}
               />
               <Bar dataKey="recorde" fill="#F2B807">
-                <LabelList dataKey="recorde" position="top" style={{ fontSize: 11, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                <LabelList dataKey="recorde" position="top" style={{ fontSize: 13, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
