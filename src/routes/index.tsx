@@ -701,7 +701,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
                   interval={0}
                   height={60}
                 />
-                <YAxis tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12, fill: "#000" }} />
                 <Tooltip
                   formatter={(v: number) => fmt(v) + " Ton"}
                   labelFormatter={(_, p) => {
@@ -715,7 +715,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
                     <LabelList
                       dataKey={d}
                       position="top"
-                      style={{ fontSize: 11, fontWeight: 600 }}
+                      style={{ fontSize: 11, fontWeight: 600, fill: "#000" }}
                       formatter={(v: number) => (v ? fmt(v) : "")}
                     />
                   </Bar>
@@ -737,10 +737,10 @@ function Dashboard({ entries }: { entries: Entry[] }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
                 <XAxis
                   dataKey="data"
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 12, fill: "#000" }}
                   tickFormatter={(v) => new Date(v + "T00:00").toLocaleDateString("pt-BR")}
                 />
-                <YAxis tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12, fill: "#000" }} />
                 <Tooltip
                   formatter={(v: number) => fmt(v) + " Ton"}
                   labelFormatter={(v) => new Date(v + "T00:00").toLocaleDateString("pt-BR")}
@@ -752,7 +752,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
                   </Bar>
                 ))}
                 <Bar dataKey="__total" fill="transparent" legendType="none">
-                  <LabelList dataKey="__total" position="top" style={{ fontSize: 13, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                  <LabelList dataKey="__total" position="top" style={{ fontSize: 13, fontWeight: 700, fill: "#000" }} formatter={(v: number) => (v ? fmt(v) : "")} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -769,8 +769,8 @@ function Dashboard({ entries }: { entries: Entry[] }) {
           <ResponsiveContainer>
             <BarChart data={chart3} margin={{ top: 34, right: 16, left: 0, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-              <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
+              <XAxis dataKey="mes" tick={{ fontSize: 12, fill: "#000" }} />
+              <YAxis tick={{ fontSize: 12, fill: "#000" }} />
               <Tooltip formatter={(v: number) => fmt(v) + " Ton"} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               {activeCatsChart3.map((c) => (
@@ -779,7 +779,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
                 </Bar>
               ))}
               <Bar dataKey="__total" fill="transparent" legendType="none">
-                <LabelList dataKey="__total" position="top" style={{ fontSize: 13, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                <LabelList dataKey="__total" position="top" style={{ fontSize: 13, fontWeight: 700, fill: "#000" }} formatter={(v: number) => (v ? fmt(v) : "")} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -795,8 +795,8 @@ function Dashboard({ entries }: { entries: Entry[] }) {
           <ResponsiveContainer>
             <BarChart data={chart4} margin={{ top: 32, right: 16, left: 0, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-              <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
+              <XAxis dataKey="mes" tick={{ fontSize: 12, fill: "#000" }} />
+              <YAxis tick={{ fontSize: 12, fill: "#000" }} />
               <Tooltip
                 formatter={(v: number) => fmt(v) + " Ton"}
                 labelFormatter={(v, p) => {
@@ -806,7 +806,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
                 }}
               />
               <Bar dataKey="recorde" fill="#F2B807">
-                <LabelList dataKey="recorde" position="top" style={{ fontSize: 13, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                <LabelList dataKey="recorde" position="top" style={{ fontSize: 13, fontWeight: 700, fill: "#000" }} formatter={(v: number) => (v ? fmt(v) : "")} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
