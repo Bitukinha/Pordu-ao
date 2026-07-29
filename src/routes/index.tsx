@@ -567,6 +567,24 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   }, [porCategoria, anosChart4]);
   const activeCatsChart4 = categoriasChart4.filter((c) => chart4.some((r) => r[c]));
 
+  // Chart 5: Recordes de produção diária — melhor dia de cada ano, de 2023 até o ano atual
+  const chart5 = useMemo(() => {
+    return anosChart4.map((y) => {
+      const doAno = porCategoria.filter((e) => e.data.startsWith(y));
+      const porDia = new Map<string, number>();
+      for (const e of doAno) porDia.set(e.data, (porDia.get(e.data) ?? 0) + e.qteTon);
+      let recorde = 0;
+      let dataRecorde = "";
+      for (const [d, v] of porDia) {
+        if (v > recorde) {
+          recorde = v;
+          dataRecorde = d;
+        }
+      }
+      return { ano: y, recorde, dataRecorde };
+    });
+  }, [porCategoria, anosChart4]);
+
   if (entries.length === 0) {
     return (
       <div className="rounded-xl border-2 border-dashed bg-card p-16 text-center">
@@ -801,6 +819,33 @@ function Dashboard({ entries }: { entries: Entry[] }) {
               ))}
               <Bar dataKey="__total" fill="transparent" legendType="none">
                 <LabelList dataKey="__total" position="top" style={{ fontSize: 11, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+
+      {/* Chart 5: Recordes de Produção Diária */}
+      <section className="rounded-xl border bg-card p-6 shadow-sm">
+        <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
+        <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Recorde de Produção Diária por Ano</h2>
+        <p className="mb-4 text-center text-xs text-muted-foreground">Maior produção em um único dia, de 2023 até o ano atual — respeita o filtro de categoria</p>
+        <div style={{ width: "100%", height: 380 }}>
+          <ResponsiveContainer>
+            <BarChart data={chart5} margin={{ top: 32, right: 16, left: 0, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+              <XAxis dataKey="ano" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip
+                formatter={(v: number) => fmt(v) + " Ton"}
+                labelFormatter={(v, p) => {
+                  const r = p?.[0]?.payload as any;
+                  const dt = r?.dataRecorde ? new Date(r.dataRecorde + "T00:00").toLocaleDateString("pt-BR") : "";
+                  return dt ? `${v} — recorde em ${dt}` : String(v);
+                }}
+              />
+              <Bar dataKey="recorde" fill="#F2B807">
+                <LabelList dataKey="recorde" position="top" style={{ fontSize: 11, fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
