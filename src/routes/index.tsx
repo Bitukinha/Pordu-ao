@@ -543,12 +543,18 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   }, [porCategoria, ano]);
   const activeCatsChart3 = CATEGORIAS.filter((c) => chart3.some((r) => r[c]));
 
-  // Chart 4: Comparativo anual — total por ano, série = categoria
+  // Chart 4: Comparativo anual — de 2023 até o ano atual, sem Milho, série = categoria
+  const anoAtualStr = String(new Date().getFullYear());
+  const categoriasChart4 = CATEGORIAS.filter((c) => c !== "Milho");
+  const anosChart4 = useMemo(
+    () => years.filter((y) => y >= "2023" && y <= anoAtualStr),
+    [years, anoAtualStr]
+  );
   const chart4 = useMemo(() => {
-    return years.map((y) => {
+    return anosChart4.map((y) => {
       const row: Record<string, string | number> = { ano: y };
       let total = 0;
-      for (const c of CATEGORIAS) {
+      for (const c of categoriasChart4) {
         const v = porCategoria
           .filter((e) => e.data.startsWith(y) && e.categoria === c)
           .reduce((s, e) => s + e.qteTon, 0);
@@ -558,8 +564,8 @@ function Dashboard({ entries }: { entries: Entry[] }) {
       row.__total = total;
       return row;
     });
-  }, [porCategoria, years]);
-  const activeCatsChart4 = CATEGORIAS.filter((c) => chart4.some((r) => r[c]));
+  }, [porCategoria, anosChart4]);
+  const activeCatsChart4 = categoriasChart4.filter((c) => chart4.some((r) => r[c]));
 
   if (entries.length === 0) {
     return (
@@ -779,7 +785,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
       <section className="rounded-xl border bg-card p-6 shadow-sm">
         <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
         <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Comparativo Anual</h2>
-        <p className="mb-4 text-center text-xs text-muted-foreground">Total de produção por ano (independe do filtro de período)</p>
+        <p className="mb-4 text-center text-xs text-muted-foreground">Total de produção por ano, de 2023 até o ano atual, exceto Milho (independe do filtro de período)</p>
         <div style={{ width: "100%", height: 380 }}>
           <ResponsiveContainer>
             <BarChart data={chart4} margin={{ top: 32, right: 16, left: 0, bottom: 20 }}>
