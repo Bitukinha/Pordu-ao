@@ -6,6 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
 } from "recharts";
 import { addEntries, addEntry, clearEntries, deleteEntry, listEntries } from "@/lib/entries";
+import { CATEGORIAS, normalizeCategoria } from "@/lib/constants";
 import logo from "@/assets/nutrimilho-logo.png";
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -29,7 +30,6 @@ type Entry = {
 
 type NewEntry = Omit<Entry, "id">;
 
-const CATEGORIAS = ["Extrusão", "Flotação", "Exportação", "Germen", "Mercado interno", "Milho"];
 const PRODUTOS = [
   "Germen", "Fubá", "Fubá Mimoso", "Pré Cozido", "Flocão",
   "N-Form-D25", "N-Form-D48", "N-Form-F28", "N-Form-F35", "N-Form-F48",
@@ -215,7 +215,7 @@ function DataEntry({
         }
         imported.push({
           data: iso,
-          categoria: String(cat).trim(),
+          categoria: normalizeCategoria(String(cat)),
           produto: String(prod).trim(),
           qteTon: Number(q),
         });
