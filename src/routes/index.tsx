@@ -748,7 +748,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 {activeCats.map((c) => (
                   <Bar key={c} dataKey={c} stackId="a" fill={CAT_COLORS[c]}>
-                    <LabelList dataKey={c} position="center" style={{ fontSize: 12, fill: "#fff", fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                    <LabelList dataKey={c} position="center" style={{ fontSize: 12, fill: "#000", fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
                   </Bar>
                 ))}
                 <Bar dataKey="__total" fill="transparent" legendType="none">
@@ -775,7 +775,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
               <Legend wrapperStyle={{ fontSize: 12 }} />
               {activeCatsChart3.map((c) => (
                 <Bar key={c} dataKey={c} stackId="a" fill={CAT_COLORS[c]}>
-                  <LabelList dataKey={c} position="center" style={{ fontSize: 12, fill: "#fff", fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                  <LabelList dataKey={c} position="center" style={{ fontSize: 12, fill: "#000", fontWeight: 700 }} formatter={(v: number) => (v ? fmt(v) : "")} />
                 </Bar>
               ))}
               <Bar dataKey="__total" fill="transparent" legendType="none">
