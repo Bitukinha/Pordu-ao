@@ -602,6 +602,12 @@ function Dashboard({ entries }: { entries: Entry[] }) {
     [entries, categoriasSel, produtosSel]
   );
 
+  // Total histórico do(s) produto(s) selecionado(s), independente do período filtrado
+  const totalGeralProduto = useMemo(
+    () => porCategoria.reduce((s, e) => s + e.qteTon, 0),
+    [porCategoria]
+  );
+
   // Chart 3: Comparativo mensal — total por mês do ano selecionado, série = categoria
   const chart3 = useMemo(() => {
     const doAno = porCategoria.filter((e) => e.data.startsWith(ano));
@@ -764,10 +770,13 @@ function Dashboard({ entries }: { entries: Entry[] }) {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className={`grid gap-4 ${produtosSel.length ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
         <Stat label="Total (Ton)" value={fmt(grandTotal)} tint="green" />
         <Stat label="Dias com produção" value={String(sortedDates.length)} tint="yellow" />
         <Stat label="Lançamentos" value={String(filtered.length)} tint="leaf" />
+        {produtosSel.length > 0 && (
+          <Stat label="Total Geral do Produto (Ton)" value={fmt(totalGeralProduto)} tint="blue" />
+        )}
       </div>
 
 
@@ -912,8 +921,8 @@ function TwoLineTick({ x, y, row }: any) {
   );
 }
 
-function Stat({ label, value, tint }: { label: string; value: string; tint: "green" | "yellow" | "leaf" }) {
-  const bg = { green: "bg-brand-green", yellow: "bg-brand-yellow", leaf: "bg-brand-leaf" }[tint];
+function Stat({ label, value, tint }: { label: string; value: string; tint: "green" | "yellow" | "leaf" | "blue" }) {
+  const bg = { green: "bg-brand-green", yellow: "bg-brand-yellow", leaf: "bg-brand-leaf", blue: "bg-sky-500" }[tint];
   return (
     <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
       <div className={`h-1 ${bg}`} />
