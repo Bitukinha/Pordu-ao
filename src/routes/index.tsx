@@ -5,8 +5,12 @@ import * as XLSX from "xlsx";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
 } from "recharts";
+import { ChevronDown } from "lucide-react";
 import { addEntries, addEntry, clearEntries, deleteEntry, listEntries } from "@/lib/entries";
 import { CATEGORIAS, normalizeCategoria } from "@/lib/constants";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
 import logo from "@/assets/nutrimilho-logo.png";
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -353,6 +357,65 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function ProdutoFilter({
+  produtos,
+  selecionados,
+  onToggle,
+  onLimpar,
+}: {
+  produtos: string[];
+  selecionados: string[];
+  onToggle: (p: string) => void;
+  onLimpar: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ativo = selecionados.length > 0;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition ${
+            ativo ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Produto{ativo ? ` (${selecionados.length})` : ""}
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Buscar produto..." className="text-sm" />
+          <CommandList>
+            <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
+            <CommandGroup>
+              {produtos.map((p) => {
+                const checked = selecionados.includes(p);
+                return (
+                  <CommandItem key={p} value={p} onSelect={() => onToggle(p)} className="cursor-pointer">
+                    <Checkbox checked={checked} className="mr-2" />
+                    <span className="text-sm">{p}</span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+          {ativo && (
+            <div className="border-t p-2">
+              <button
+                onClick={() => onLimpar()}
+                className="w-full rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Limpar seleção de produtos
+              </button>
+            </div>
+          )}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 const FILTRO_STORAGE_KEY = "nutrimilho:dashboard-filtro";
 
 type FiltroSalvo = {
@@ -361,6 +424,7 @@ type FiltroSalvo = {
   dtIni?: string;
   dtFim?: string;
   categoriasSel?: string[];
+  produtosSel?: string[];
 };
 
 function carregarFiltroSalvo(): FiltroSalvo {
@@ -391,6 +455,12 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   const [dtIni, setDtIni] = useState<string>(filtroSalvo.dtIni ?? "");
   const [dtFim, setDtFim] = useState<string>(filtroSalvo.dtFim ?? "");
   const [categoriasSel, setCategoriasSel] = useState<string[]>(filtroSalvo.categoriasSel ?? []); // [] = todas
+  const [produtosSel, setProdutosSel] = useState<string[]>(filtroSalvo.produtosSel ?? []); // [] = todos
+
+  const produtosDisponiveis = useMemo(
+    () => Array.from(new Set(entries.map((e) => e.produto))).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [entries]
+  );
 
   const anoAtualInicial = String(new Date().getFullYear());
   const mesAtualInicial = String(new Date().getMonth() + 1).padStart(2, "0");
@@ -413,12 +483,12 @@ function Dashboard({ entries }: { entries: Entry[] }) {
     try {
       localStorage.setItem(
         FILTRO_STORAGE_KEY,
-        JSON.stringify({ ano, mes, dtIni, dtFim, categoriasSel })
+        JSON.stringify({ ano, mes, dtIni, dtFim, categoriasSel, produtosSel })
       );
     } catch {
       // ignore
     }
-  }, [ano, mes, dtIni, dtFim, categoriasSel]);
+  }, [ano, mes, dtIni, dtFim, categoriasSel, produtosSel]);
 
   const monthsForYear = useMemo(() => {
     const s = new Set(entries.filter((e) => e.data.startsWith(ano)).map((e) => e.data.slice(5, 7)));
@@ -459,11 +529,15 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   function toggleCategoria(c: string) {
     setCategoriasSel((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
   }
+  function toggleProduto(p: string) {
+    setProdutosSel((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
+  }
 
   const filtered = useMemo(
     () =>
       entries.filter((e) => {
         if (categoriasSel.length && !categoriasSel.includes(e.categoria)) return false;
+        if (produtosSel.length && !produtosSel.includes(e.produto)) return false;
         if (usaPeriodo) {
           if (dtIni && e.data < dtIni) return false;
           if (dtFim && e.data > dtFim) return false;
@@ -473,7 +547,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
         if (mes && e.data.slice(5, 7) !== mes) return false;
         return true;
       }),
-    [entries, ano, mes, dtIni, dtFim, usaPeriodo, categoriasSel]
+    [entries, ano, mes, dtIni, dtFim, usaPeriodo, categoriasSel, produtosSel]
   );
 
   const sortedDates = useMemo(
@@ -517,10 +591,15 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   const grandTotal = chart2.reduce((s, r) => s + (r.__total as number), 0);
   const activeCats = CATEGORIAS.filter((c) => chart2.some((r) => r[c]));
 
-  // Entradas filtradas apenas por categoria (ignora período/ano/mês) para os comparativos gerais
+  // Entradas filtradas apenas por categoria/produto (ignora período/ano/mês) para os comparativos gerais
   const porCategoria = useMemo(
-    () => entries.filter((e) => !categoriasSel.length || categoriasSel.includes(e.categoria)),
-    [entries, categoriasSel]
+    () =>
+      entries.filter(
+        (e) =>
+          (!categoriasSel.length || categoriasSel.includes(e.categoria)) &&
+          (!produtosSel.length || produtosSel.includes(e.produto))
+      ),
+    [entries, categoriasSel, produtosSel]
   );
 
   // Chart 3: Comparativo mensal — total por mês do ano selecionado, série = categoria
@@ -647,7 +726,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
             <input type="date" value={dtFim} onChange={(e) => setDtFim(e.target.value)} className={inputCls + " w-40"} />
           </label>
           <button
-            onClick={() => { setMes(""); setDtIni(""); setDtFim(""); setCategoriasSel([]); if (years.length) setAno(years[years.length - 1]); }}
+            onClick={() => { setMes(""); setDtIni(""); setDtFim(""); setCategoriasSel([]); setProdutosSel([]); if (years.length) setAno(years[years.length - 1]); }}
             className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline"
           >
             Limpar filtros
@@ -675,6 +754,13 @@ function Dashboard({ entries }: { entries: Entry[] }) {
               {c}
             </button>
           ))}
+          <div className="mx-1 hidden h-5 w-px bg-border sm:block" />
+          <ProdutoFilter
+            produtos={produtosDisponiveis}
+            selecionados={produtosSel}
+            onToggle={toggleProduto}
+            onLimpar={() => setProdutosSel([])}
+          />
         </div>
       </div>
 
