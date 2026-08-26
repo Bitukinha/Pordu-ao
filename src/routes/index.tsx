@@ -7,7 +7,7 @@ import {
 } from "recharts";
 import { ChevronDown } from "lucide-react";
 import { addEntries, addEntry, clearEntries, deleteEntry, listEntries } from "@/lib/entries";
-import { CATEGORIAS, normalizeCategoria } from "@/lib/constants";
+import { CATEGORIAS, normalizeCategoria, PRODUTOS, normalizeProduto } from "@/lib/constants";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,13 +33,6 @@ type Entry = {
 };
 
 type NewEntry = Omit<Entry, "id">;
-
-const PRODUTOS = [
-  "Germen", "Fubá", "Fubá Mimoso", "Pré Cozido", "Flocão",
-  "N-Form-D25", "N-Form-D48", "N-Form-F28", "N-Form-F35", "N-Form-F48",
-  "Nutrigel", "Nutrigel Pro", "Grits Fino", "Grits Remoido",
-  "Canjica Amarela", "Canjiquinha Fina", "Farinha Média", "Milho",
-];
 
 // palette derived from Nutrimilho logo (greens/yellows/warm)
 const CAT_COLORS: Record<string, string> = {
@@ -220,7 +213,7 @@ function DataEntry({
         imported.push({
           data: iso,
           categoria: normalizeCategoria(String(cat)),
-          produto: String(prod).trim(),
+          produto: normalizeProduto(String(prod)),
           qteTon: Number(q),
         });
       }

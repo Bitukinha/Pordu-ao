@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { db } from "./db/client";
 import { entries as entriesTable } from "./db/schema";
-import { normalizeCategoria } from "./constants";
+import { normalizeCategoria, normalizeProduto } from "./constants";
 
 const entryInput = z.object({
   data: z.string(),
@@ -18,7 +18,7 @@ function toEntry(row: typeof entriesTable.$inferSelect) {
     id: row.id,
     data: row.data,
     categoria: normalizeCategoria(row.categoria),
-    produto: row.produto,
+    produto: normalizeProduto(row.produto),
     qteTon: Number(row.qteTon),
   };
 }
@@ -29,7 +29,12 @@ export const listEntries = createServerFn({ method: "GET" }).handler(async () =>
 });
 
 function toRow(entry: z.infer<typeof entryInput>) {
-  return { ...entry, categoria: normalizeCategoria(entry.categoria), qteTon: String(entry.qteTon) };
+  return {
+    ...entry,
+    categoria: normalizeCategoria(entry.categoria),
+    produto: normalizeProduto(entry.produto),
+    qteTon: String(entry.qteTon),
+  };
 }
 
 export const addEntry = createServerFn({ method: "POST" })
