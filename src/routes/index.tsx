@@ -584,6 +584,53 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   const grandTotal = chart2.reduce((s, r) => s + (r.__total as number), 0);
   const activeCats = CATEGORIAS.filter((c) => chart2.some((r) => r[c]));
 
+  // Produtos que não geram Germen como subproduto — não entram na base de comparação
+  const NAO_GERA_GERMEN = ["Nutrigel Pro", "N-Form-NT48"];
+  const META_GERMEN_PCT = 30;
+  const filtrandoGermen = categoriasSel.includes("Germen") || produtosSel.includes("Germen");
+
+  // Entradas do período selecionado (ignora filtro de categoria/produto, para poder comparar Germen com as demais categorias)
+  const entriesPeriodo = useMemo(
+    () =>
+      entries.filter((e) => {
+        if (usaPeriodo) {
+          if (dtIni && e.data < dtIni) return false;
+          if (dtFim && e.data > dtFim) return false;
+          return true;
+        }
+        if (ano && !e.data.startsWith(ano)) return false;
+        if (mes && e.data.slice(5, 7) !== mes) return false;
+        return true;
+      }),
+    [entries, ano, mes, dtIni, dtFim, usaPeriodo]
+  );
+
+  const germenAnalise = useMemo(() => {
+    const dias = Array.from(new Set(entriesPeriodo.map((e) => e.data))).sort();
+    let germenTotal = 0;
+    let outrasTotal = 0;
+    const percPorDia: number[] = [];
+    for (const d of dias) {
+      const doDia = entriesPeriodo.filter((e) => e.data === d);
+      const gDia = doDia.filter((e) => e.categoria === "Germen").reduce((s, e) => s + e.qteTon, 0);
+      const oDia = doDia
+        .filter((e) => e.categoria !== "Germen" && !NAO_GERA_GERMEN.includes(e.produto))
+        .reduce((s, e) => s + e.qteTon, 0);
+      germenTotal += gDia;
+      outrasTotal += oDia;
+      if (oDia > 0) percPorDia.push((gDia / oDia) * 100);
+    }
+    const percentual = outrasTotal > 0 ? (germenTotal / outrasTotal) * 100 : 0;
+    const media = percPorDia.length ? percPorDia.reduce((s, v) => s + v, 0) / percPorDia.length : 0;
+    return {
+      germenTotal,
+      outrasTotal,
+      percentual,
+      media,
+      status: percentual > META_GERMEN_PCT ? "alerta" : "boa",
+    } as const;
+  }, [entriesPeriodo]);
+
   // Entradas filtradas apenas por categoria/produto (ignora período/ano/mês) para os comparativos gerais
   const porCategoria = useMemo(
     () =>
@@ -771,6 +818,42 @@ function Dashboard({ entries }: { entries: Entry[] }) {
           <Stat label="Total Geral do Produto (Ton)" value={fmt(totalGeralProduto)} tint="blue" />
         )}
       </div>
+
+      {filtrandoGermen && (
+        <section
+          className={`rounded-xl border p-5 shadow-sm ${
+            germenAnalise.status === "alerta" ? "border-red-300 bg-red-50" : "border-green-300 bg-green-50"
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase text-muted-foreground">
+                Percentual de Germen sobre as demais categorias
+              </p>
+              <p
+                className={`mt-1 text-4xl font-bold tabular-nums ${
+                  germenAnalise.status === "alerta" ? "text-red-600" : "text-green-700"
+                }`}
+              >
+                {fmt(germenAnalise.percentual)}%
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Meta: até {META_GERMEN_PCT}% · Média do período: {fmt(germenAnalise.media)}%
+              </p>
+            </div>
+            <span
+              className={`rounded-full px-4 py-1.5 text-sm font-semibold ${
+                germenAnalise.status === "alerta" ? "bg-red-600 text-white" : "bg-green-600 text-white"
+              }`}
+            >
+              {germenAnalise.status === "alerta" ? "⚠ Alerta" : "✓ Boa"}
+            </span>
+          </div>
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Germen: {fmt(germenAnalise.germenTotal)} Ton · Demais categorias (exceto Nutrigel Pro e N-Form-NT48): {fmt(germenAnalise.outrasTotal)} Ton
+          </p>
+        </section>
+      )}
 
 
       {/* Chart 1 */}
