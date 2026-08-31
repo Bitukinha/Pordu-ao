@@ -608,23 +608,24 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   const germenAnalise = useMemo(() => {
     const dias = Array.from(new Set(entriesPeriodo.map((e) => e.data))).sort();
     let germenTotal = 0;
-    let outrasTotal = 0;
+    let totalProcessado = 0;
     const percPorDia: number[] = [];
     for (const d of dias) {
       const doDia = entriesPeriodo.filter((e) => e.data === d);
       const gDia = doDia.filter((e) => e.categoria === "Germen").reduce((s, e) => s + e.qteTon, 0);
-      const oDia = doDia
-        .filter((e) => e.categoria !== "Germen" && !NAO_GERA_GERMEN.includes(e.produto))
+      // Milho processado = todas as categorias (incluindo Germen), exceto produtos que não geram Germen
+      const pDia = doDia
+        .filter((e) => !NAO_GERA_GERMEN.includes(e.produto))
         .reduce((s, e) => s + e.qteTon, 0);
       germenTotal += gDia;
-      outrasTotal += oDia;
-      if (oDia > 0) percPorDia.push((gDia / oDia) * 100);
+      totalProcessado += pDia;
+      if (pDia > 0) percPorDia.push((gDia / pDia) * 100);
     }
-    const percentual = outrasTotal > 0 ? (germenTotal / outrasTotal) * 100 : 0;
+    const percentual = totalProcessado > 0 ? (germenTotal / totalProcessado) * 100 : 0;
     const media = percPorDia.length ? percPorDia.reduce((s, v) => s + v, 0) / percPorDia.length : 0;
     return {
       germenTotal,
-      outrasTotal,
+      totalProcessado,
       percentual,
       media,
       status: percentual > META_GERMEN_PCT ? "alerta" : "boa",
@@ -828,7 +829,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase text-muted-foreground">
-                Percentual de Germen sobre as demais categorias
+                Percentual de Germen sobre o milho processado
               </p>
               <p
                 className={`mt-1 text-4xl font-bold tabular-nums ${
@@ -850,7 +851,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
             </span>
           </div>
           <p className="mt-3 text-[11px] text-muted-foreground">
-            Germen: {fmt(germenAnalise.germenTotal)} Ton · Demais categorias (exceto Nutrigel Pro e N-Form-NT48): {fmt(germenAnalise.outrasTotal)} Ton
+            Germen: {fmt(germenAnalise.germenTotal)} Ton · Total milho processado (todas categorias, exceto Nutrigel Pro e N-Form-NT48): {fmt(germenAnalise.totalProcessado)} Ton
           </p>
         </section>
       )}
