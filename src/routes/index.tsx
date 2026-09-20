@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
 } from "recharts";
 import { ChevronDown } from "lucide-react";
 import { addEntries, addEntry, clearEntries, deleteEntry, listEntries } from "@/lib/entries";
@@ -43,6 +43,11 @@ const CAT_COLORS: Record<string, string> = {
   "Mercado interno": "#7CB342",
   "Milho": "#C0392B",
 };
+// cores por produto (índice na lista de produtos existentes, estável independente do filtro)
+const PRODUTO_PALETTE = [
+  "#F2B807", "#3E7CB1", "#E8833A", "#7CB342", "#8FA6A2", "#C0392B", "#9B59B6", "#5DADE2",
+  "#16A085", "#D35400", "#F48FB1", "#795548", "#AED581", "#607D8B", "#FFD54F", "#4DB6AC",
+];
 const DATE_PALETTE = ["#3E7CB1", "#E8833A", "#8FA6A2", "#F2B807", "#5DADE2", "#7CB342", "#C0392B", "#9B59B6"];
 
 function fmt(n: number) {
@@ -581,26 +586,25 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   }, [filtered, sortedDates]);
 
 
-  // Chart 5: Total por produto no dia — dia escolhido, ou o último dia com produção no filtro
-  const [diaProduto, setDiaProduto] = useState("");
-  const diaChart5 = sortedDates.includes(diaProduto) ? diaProduto : sortedDates[sortedDates.length - 1] ?? "";
+  // Chart 5: Total diário por produto — barra empilhada por data, série = produto
   const chart5 = useMemo(() => {
-    const map = new Map<string, { produto: string; categoria: string; total: number }>();
-    for (const e of filtered) {
-      if (e.data !== diaChart5) continue;
-      const key = `${e.categoria}||${e.produto}`;
-      const cur = map.get(key) ?? { produto: e.produto, categoria: e.categoria, total: 0 };
-      cur.total += e.qteTon;
-      map.set(key, cur);
-    }
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [filtered, diaChart5]);
+    return sortedDates.map((d) => {
+      const row: Record<string, string | number> = { data: d };
+      let total = 0;
+      for (const e of filtered) {
+        if (e.data !== d) continue;
+        row[e.produto] = ((row[e.produto] as number) ?? 0) + e.qteTon;
+        total += e.qteTon;
+      }
+      row.__total = total;
+      return row;
+    });
+  }, [filtered, sortedDates]);
+  const activeProdutos = produtosDisponiveis.filter((p) => chart5.some((r) => r[p]));
 
   const grandTotal = chart2.reduce((s, r) => s + (r.__total as number), 0);
   const activeCats = CATEGORIAS.filter((c) => chart2.some((r) => r[c]));
 
-  // Produtos que não geram Germen como subproduto — não entram na base de comparação
-  const NAO_GERA_GERMEN = ["Nutrigel Pro", "N-Form-NT48"];
   const META_GERMEN_PCT = 30;
   const filtrandoGermen = categoriasSel.includes("Germen") || produtosSel.includes("Germen");
 
@@ -628,10 +632,8 @@ function Dashboard({ entries }: { entries: Entry[] }) {
     for (const d of dias) {
       const doDia = entriesPeriodo.filter((e) => e.data === d);
       const gDia = doDia.filter((e) => e.categoria === "Germen").reduce((s, e) => s + e.qteTon, 0);
-      // Milho processado = todas as categorias (incluindo Germen), exceto produtos que não geram Germen
-      const pDia = doDia
-        .filter((e) => !NAO_GERA_GERMEN.includes(e.produto))
-        .reduce((s, e) => s + e.qteTon, 0);
+      // Milho processado = todas as categorias e produtos (incluindo Germen)
+      const pDia = doDia.reduce((s, e) => s + e.qteTon, 0);
       germenTotal += gDia;
       totalProcessado += pDia;
       if (pDia > 0) percPorDia.push((gDia / pDia) * 100);
@@ -866,7 +868,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
             </span>
           </div>
           <p className="mt-3 text-[11px] text-muted-foreground">
-            Germen: {fmt(germenAnalise.germenTotal)} Ton · Total milho processado (todas categorias, exceto Nutrigel Pro e N-Form-NT48): {fmt(germenAnalise.totalProcessado)} Ton
+            Germen: {fmt(germenAnalise.germenTotal)} Ton · Total milho processado (todas categorias e produtos): {fmt(germenAnalise.totalProcessado)} Ton
           </p>
         </section>
       )}
@@ -947,42 +949,38 @@ function Dashboard({ entries }: { entries: Entry[] }) {
         </div>
       </section>
 
-      {/* Chart 5: Total por Produto */}
+      {/* Chart 5: Total Diário por Produto */}
       <section className="rounded-xl border bg-card p-6 shadow-sm">
         <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
-        <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Total por Produto no Dia</h2>
-        <p className="mb-3 text-center text-xs text-muted-foreground">Produção do dia escolhido, ordenada do maior para o menor — cor = categoria</p>
-        <div className="mb-4 flex justify-center">
-          <label className="flex items-center gap-2 text-sm">
-            <span className="text-xs text-muted-foreground">Dia</span>
-            <select value={diaChart5} onChange={(e) => setDiaProduto(e.target.value)} className={inputCls + " w-40"}>
-              {sortedDates.slice().reverse().map((d) => (
-                <option key={d} value={d}>{new Date(d + "T00:00").toLocaleDateString("pt-BR")}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div style={{ width: "100%", height: Math.max(240, chart5.length * 36 + 40) }}>
-          <ResponsiveContainer>
-            <BarChart data={chart5} layout="vertical" margin={{ top: 8, right: 56, left: 8, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eee" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 12, fill: "#000" }} />
-              <YAxis type="category" dataKey="produto" width={130} tick={{ fontSize: 12, fill: "#000" }} interval={0} />
-              <Tooltip
-                formatter={(v: number) => fmt(v) + " Ton"}
-                labelFormatter={(_, p) => {
-                  const r = p?.[0]?.payload as any;
-                  return r ? `${r.categoria} — ${r.produto}` : "";
-                }}
-              />
-              <Bar dataKey="total">
-                {chart5.map((r) => (
-                  <Cell key={`${r.categoria}||${r.produto}`} fill={CAT_COLORS[r.categoria] || "#999"} />
+        <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Total Diário por Produto</h2>
+        <p className="mb-4 text-center text-xs text-muted-foreground">Cada cor representa um produto — acompanha os filtros aplicados</p>
+        <div className="w-full overflow-x-auto">
+          <div style={{ minWidth: Math.max(760, sortedDates.length * 70), height: 440 }}>
+            <ResponsiveContainer>
+              <BarChart data={chart5} margin={{ top: 34, right: 16, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                <XAxis
+                  dataKey="data"
+                  tick={{ fontSize: 12, fill: "#000" }}
+                  tickFormatter={(v) => new Date(v + "T00:00").toLocaleDateString("pt-BR")}
+                />
+                <YAxis tick={{ fontSize: 12, fill: "#000" }} />
+                <Tooltip
+                  formatter={(v: number) => fmt(v) + " Ton"}
+                  labelFormatter={(v) => new Date(v + "T00:00").toLocaleDateString("pt-BR")}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {activeProdutos.map((p) => (
+                  <Bar key={p} dataKey={p} stackId="a" fill={PRODUTO_PALETTE[produtosDisponiveis.indexOf(p) % PRODUTO_PALETTE.length]}>
+                    <LabelList dataKey={p} position="center" style={{ fontSize: 12, fill: "#000" }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                  </Bar>
                 ))}
-                <LabelList dataKey="total" position="right" style={{ fontSize: 12, fontWeight: 700, fill: "#000" }} formatter={(v: number) => fmt(v)} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+                <Bar dataKey="__total" fill="transparent" legendType="none">
+                  <LabelList dataKey="__total" position="top" style={{ fontSize: 13, fontWeight: 700, fill: "#000" }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </section>
 
