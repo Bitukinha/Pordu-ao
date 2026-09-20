@@ -581,17 +581,20 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   }, [filtered, sortedDates]);
 
 
-  // Chart 5: Total por produto — uma barra por produto, somando o período filtrado
+  // Chart 5: Total por produto no dia — dia escolhido, ou o último dia com produção no filtro
+  const [diaProduto, setDiaProduto] = useState("");
+  const diaChart5 = sortedDates.includes(diaProduto) ? diaProduto : sortedDates[sortedDates.length - 1] ?? "";
   const chart5 = useMemo(() => {
     const map = new Map<string, { produto: string; categoria: string; total: number }>();
     for (const e of filtered) {
+      if (e.data !== diaChart5) continue;
       const key = `${e.categoria}||${e.produto}`;
       const cur = map.get(key) ?? { produto: e.produto, categoria: e.categoria, total: 0 };
       cur.total += e.qteTon;
       map.set(key, cur);
     }
     return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [filtered]);
+  }, [filtered, diaChart5]);
 
   const grandTotal = chart2.reduce((s, r) => s + (r.__total as number), 0);
   const activeCats = CATEGORIAS.filter((c) => chart2.some((r) => r[c]));
@@ -947,8 +950,18 @@ function Dashboard({ entries }: { entries: Entry[] }) {
       {/* Chart 5: Total por Produto */}
       <section className="rounded-xl border bg-card p-6 shadow-sm">
         <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
-        <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Total por Produto</h2>
-        <p className="mb-4 text-center text-xs text-muted-foreground">Soma do período filtrado, ordenada do maior para o menor — cor = categoria</p>
+        <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Total por Produto no Dia</h2>
+        <p className="mb-3 text-center text-xs text-muted-foreground">Produção do dia escolhido, ordenada do maior para o menor — cor = categoria</p>
+        <div className="mb-4 flex justify-center">
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-xs text-muted-foreground">Dia</span>
+            <select value={diaChart5} onChange={(e) => setDiaProduto(e.target.value)} className={inputCls + " w-40"}>
+              {sortedDates.slice().reverse().map((d) => (
+                <option key={d} value={d}>{new Date(d + "T00:00").toLocaleDateString("pt-BR")}</option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div style={{ width: "100%", height: Math.max(240, chart5.length * 36 + 40) }}>
           <ResponsiveContainer>
             <BarChart data={chart5} layout="vertical" margin={{ top: 8, right: 56, left: 8, bottom: 8 }}>
