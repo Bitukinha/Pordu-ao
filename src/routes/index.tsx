@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, Cell,
 } from "recharts";
 import { ChevronDown } from "lucide-react";
 import { addEntries, addEntry, clearEntries, deleteEntry, listEntries } from "@/lib/entries";
@@ -581,6 +581,18 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   }, [filtered, sortedDates]);
 
 
+  // Chart 5: Total por produto — uma barra por produto, somando o período filtrado
+  const chart5 = useMemo(() => {
+    const map = new Map<string, { produto: string; categoria: string; total: number }>();
+    for (const e of filtered) {
+      const key = `${e.categoria}||${e.produto}`;
+      const cur = map.get(key) ?? { produto: e.produto, categoria: e.categoria, total: 0 };
+      cur.total += e.qteTon;
+      map.set(key, cur);
+    }
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [filtered]);
+
   const grandTotal = chart2.reduce((s, r) => s + (r.__total as number), 0);
   const activeCats = CATEGORIAS.filter((c) => chart2.some((r) => r[c]));
 
@@ -929,6 +941,35 @@ function Dashboard({ entries }: { entries: Entry[] }) {
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      </section>
+
+      {/* Chart 5: Total por Produto */}
+      <section className="rounded-xl border bg-card p-6 shadow-sm">
+        <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
+        <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Total por Produto</h2>
+        <p className="mb-4 text-center text-xs text-muted-foreground">Soma do período filtrado, ordenada do maior para o menor — cor = categoria</p>
+        <div style={{ width: "100%", height: Math.max(240, chart5.length * 36 + 40) }}>
+          <ResponsiveContainer>
+            <BarChart data={chart5} layout="vertical" margin={{ top: 8, right: 56, left: 8, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eee" horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 12, fill: "#000" }} />
+              <YAxis type="category" dataKey="produto" width={130} tick={{ fontSize: 12, fill: "#000" }} interval={0} />
+              <Tooltip
+                formatter={(v: number) => fmt(v) + " Ton"}
+                labelFormatter={(_, p) => {
+                  const r = p?.[0]?.payload as any;
+                  return r ? `${r.categoria} — ${r.produto}` : "";
+                }}
+              />
+              <Bar dataKey="total">
+                {chart5.map((r) => (
+                  <Cell key={`${r.categoria}||${r.produto}`} fill={CAT_COLORS[r.categoria] || "#999"} />
+                ))}
+                <LabelList dataKey="total" position="right" style={{ fontSize: 12, fontWeight: 700, fill: "#000" }} formatter={(v: number) => fmt(v)} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </section>
 
