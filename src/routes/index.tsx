@@ -606,6 +606,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
   const activeCats = CATEGORIAS.filter((c) => chart2.some((r) => r[c]));
 
   const META_GERMEN_PCT = 30;
+  const SEGMENTOS_PRODUCAO_GERMEN = ["Mercado interno", "Flotação", "Extrusão", "Exportação", "Germen"];
   const filtrandoGermen = categoriasSel.includes("Germen") || produtosSel.includes("Germen");
 
   // Entradas do período selecionado (ignora filtro de categoria/produto, para poder comparar Germen com as demais categorias)
@@ -631,9 +632,13 @@ function Dashboard({ entries }: { entries: Entry[] }) {
     const percPorDia: number[] = [];
     for (const d of dias) {
       const doDia = entriesPeriodo.filter((e) => e.data === d);
-      const gDia = doDia.filter((e) => e.categoria === "Germen").reduce((s, e) => s + e.qteTon, 0);
-      // Milho processado = todas as categorias e produtos (incluindo Germen)
-      const pDia = doDia.reduce((s, e) => s + e.qteTon, 0);
+      // Germen = lançamentos na categoria Germen ou com produto Germen (em qualquer categoria)
+      const isGermen = (e: (typeof doDia)[number]) => e.categoria === "Germen" || e.produto === "Germen";
+      const gDia = doDia.filter(isGermen).reduce((s, e) => s + e.qteTon, 0);
+      // Produção total = Mercado interno + Flotação + Extrusão + Exportação + Germen
+      const pDia = doDia
+        .filter((e) => SEGMENTOS_PRODUCAO_GERMEN.includes(e.categoria) || isGermen(e))
+        .reduce((s, e) => s + e.qteTon, 0);
       germenTotal += gDia;
       totalProcessado += pDia;
       if (pDia > 0) percPorDia.push((gDia / pDia) * 100);
@@ -846,7 +851,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase text-muted-foreground">
-                Percentual de Germen sobre o milho processado
+                Percentual de Germen sobre a produção total
               </p>
               <p
                 className={`mt-1 text-4xl font-bold tabular-nums ${
@@ -868,7 +873,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
             </span>
           </div>
           <p className="mt-3 text-[11px] text-muted-foreground">
-            Germen: {fmt(germenAnalise.germenTotal)} Ton · Total milho processado (todas categorias e produtos): {fmt(germenAnalise.totalProcessado)} Ton
+            Germen: {fmt(germenAnalise.germenTotal)} Ton · Produção total (Mercado interno + Flotação + Extrusão + Exportação + Germen): {fmt(germenAnalise.totalProcessado)} Ton
           </p>
         </section>
       )}
