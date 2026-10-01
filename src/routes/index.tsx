@@ -607,7 +607,12 @@ function Dashboard({ entries }: { entries: Entry[] }) {
 
   const META_GERMEN_PCT = 30;
   const SEGMENTOS_PRODUCAO_GERMEN = ["Mercado interno", "Flotação", "Extrusão", "Exportação", "Germen"];
-  const filtrandoGermen = categoriasSel.includes("Germen") || produtosSel.includes("Germen");
+  // Só Germen selecionado (na categoria e/ou no produto), sem nenhum outro filtro junto
+  const soGermen = (sel: string[]) => sel.length === 1 && sel[0] === "Germen";
+  const filtrandoGermen =
+    (soGermen(categoriasSel) || soGermen(produtosSel)) &&
+    (categoriasSel.length === 0 || soGermen(categoriasSel)) &&
+    (produtosSel.length === 0 || soGermen(produtosSel));
 
   // Entradas do período selecionado (ignora filtro de categoria/produto, para poder comparar Germen com as demais categorias)
   const entriesPeriodo = useMemo(
