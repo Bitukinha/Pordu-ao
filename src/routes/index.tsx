@@ -414,26 +414,6 @@ function ProdutoFilter({
   );
 }
 
-const FILTRO_STORAGE_KEY = "nutrimilho:dashboard-filtro";
-
-type FiltroSalvo = {
-  ano?: string;
-  mes?: string;
-  dtIni?: string;
-  dtFim?: string;
-  categoriasSel?: string[];
-  produtosSel?: string[];
-};
-
-function carregarFiltroSalvo(): FiltroSalvo {
-  try {
-    const raw = localStorage.getItem(FILTRO_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
 /* -------------------- DASHBOARD -------------------- */
 function Dashboard({ entries }: { entries: Entry[] }) {
   // Available years/months from data
@@ -442,51 +422,22 @@ function Dashboard({ entries }: { entries: Entry[] }) {
     [entries]
   );
 
-  const filtroSalvoRef = useRef<FiltroSalvo | null>(null);
-  if (filtroSalvoRef.current === null) filtroSalvoRef.current = carregarFiltroSalvo();
-  const filtroSalvo = filtroSalvoRef.current;
-  const tinhaFiltroSalvo = Object.keys(filtroSalvo).length > 0;
-  const defaultMensalAplicadoRef = useRef(false);
-
-  const [ano, setAno] = useState<string>(filtroSalvo.ano ?? "");
-  const [mes, setMes] = useState<string>(filtroSalvo.mes ?? ""); // "" = todos, "01".."12"
-  const [dtIni, setDtIni] = useState<string>(filtroSalvo.dtIni ?? "");
-  const [dtFim, setDtFim] = useState<string>(filtroSalvo.dtFim ?? "");
-  const [categoriasSel, setCategoriasSel] = useState<string[]>(filtroSalvo.categoriasSel ?? []); // [] = todas
-  const [produtosSel, setProdutosSel] = useState<string[]>(filtroSalvo.produtosSel ?? []); // [] = todos
+  // Ao entrar no app o dashboard abre sempre nos últimos 7 dias, com todas as categorias e produtos
+  const [ano, setAno] = useState<string>("");
+  const [mes, setMes] = useState<string>(""); // "" = todos, "01".."12"
+  const [dtIni, setDtIni] = useState<string>(() => new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10));
+  const [dtFim, setDtFim] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [categoriasSel, setCategoriasSel] = useState<string[]>([]); // [] = todas
+  const [produtosSel, setProdutosSel] = useState<string[]>([]); // [] = todos
 
   const produtosDisponiveis = useMemo(
     () => Array.from(new Set(entries.map((e) => e.produto))).sort((a, b) => a.localeCompare(b, "pt-BR")),
     [entries]
   );
 
-  const anoAtualInicial = String(new Date().getFullYear());
-  const mesAtualInicial = String(new Date().getMonth() + 1).padStart(2, "0");
-
   useEffect(() => {
     if (years.length && !years.includes(ano)) setAno(years[years.length - 1]);
   }, [years, ano]);
-
-  // Filtro padrão sempre "Mensal" quando não há filtro salvo do usuário
-  useEffect(() => {
-    if (tinhaFiltroSalvo || defaultMensalAplicadoRef.current) return;
-    if (!years.length) return;
-    defaultMensalAplicadoRef.current = true;
-    setAno(years.includes(anoAtualInicial) ? anoAtualInicial : years[years.length - 1]);
-    setMes(mesAtualInicial);
-  }, [years, tinhaFiltroSalvo, anoAtualInicial, mesAtualInicial]);
-
-  // Persiste o filtro atual para a próxima visita
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        FILTRO_STORAGE_KEY,
-        JSON.stringify({ ano, mes, dtIni, dtFim, categoriasSel, produtosSel })
-      );
-    } catch {
-      // ignore
-    }
-  }, [ano, mes, dtIni, dtFim, categoriasSel, produtosSel]);
 
   const monthsForYear = useMemo(() => {
     const s = new Set(entries.filter((e) => e.data.startsWith(ano)).map((e) => e.data.slice(5, 7)));
