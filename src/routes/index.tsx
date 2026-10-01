@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, Cell, ReferenceLine,
 } from "recharts";
 import { ChevronDown } from "lucide-react";
 import { addEntries, addEntry, clearEntries, deleteEntry, listEntries } from "@/lib/entries";
@@ -630,6 +630,7 @@ function Dashboard({ entries }: { entries: Entry[] }) {
     let germenTotal = 0;
     let totalProcessado = 0;
     const percPorDia: number[] = [];
+    const porDia: { data: string; percentual: number }[] = [];
     for (const d of dias) {
       const doDia = entriesPeriodo.filter((e) => e.data === d);
       // Germen = lançamentos na categoria Germen ou com produto Germen (em qualquer categoria)
@@ -641,7 +642,10 @@ function Dashboard({ entries }: { entries: Entry[] }) {
         .reduce((s, e) => s + e.qteTon, 0);
       germenTotal += gDia;
       totalProcessado += pDia;
-      if (pDia > 0) percPorDia.push((gDia / pDia) * 100);
+      if (pDia > 0) {
+        percPorDia.push((gDia / pDia) * 100);
+        porDia.push({ data: d, percentual: (gDia / pDia) * 100 });
+      }
     }
     const percentual = totalProcessado > 0 ? (germenTotal / totalProcessado) * 100 : 0;
     const media = percPorDia.length ? percPorDia.reduce((s, v) => s + v, 0) / percPorDia.length : 0;
@@ -650,6 +654,8 @@ function Dashboard({ entries }: { entries: Entry[] }) {
       totalProcessado,
       percentual,
       media,
+      // Dia mais recente no topo do gráfico horizontal
+      porDia: porDia.reverse(),
       status: percentual > META_GERMEN_PCT ? "alerta" : "boa",
     } as const;
   }, [entriesPeriodo]);
@@ -878,6 +884,47 @@ function Dashboard({ entries }: { entries: Entry[] }) {
         </section>
       )}
 
+      {filtrandoGermen && germenAnalise.porDia.length > 0 && (
+        <section className="rounded-xl border bg-card p-6 shadow-sm">
+          <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
+          <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">% Germen por Produção Diária</h2>
+          <p className="mb-4 text-center text-xs text-muted-foreground">
+            Germen ÷ (Mercado interno + Flotação + Extrusão + Exportação + Germen) · Meta: até {META_GERMEN_PCT}%
+          </p>
+          <div style={{ height: Math.max(240, germenAnalise.porDia.length * 28 + 60) }}>
+            <ResponsiveContainer>
+              <BarChart data={germenAnalise.porDia} layout="vertical" margin={{ top: 8, right: 64, left: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" horizontal={false} />
+                <XAxis type="number" domain={[0, "auto"]} tick={{ fontSize: 12, fill: "#000" }} tickFormatter={(v) => `${v}%`} />
+                <YAxis
+                  type="category"
+                  dataKey="data"
+                  width={90}
+                  interval={0}
+                  tick={{ fontSize: 12, fill: "#000" }}
+                  tickFormatter={(v) => new Date(v + "T00:00").toLocaleDateString("pt-BR")}
+                />
+                <Tooltip
+                  formatter={(v: number) => [fmt(v) + "%", "% Germen"]}
+                  labelFormatter={(v) => new Date(v + "T00:00").toLocaleDateString("pt-BR")}
+                />
+                <ReferenceLine x={META_GERMEN_PCT} stroke="#dc2626" strokeDasharray="4 4" />
+                <Bar dataKey="percentual" barSize={16}>
+                  {germenAnalise.porDia.map((r) => (
+                    <Cell key={r.data} fill={r.percentual > META_GERMEN_PCT ? "#dc2626" : "#1F3A6E"} />
+                  ))}
+                  <LabelList
+                    dataKey="percentual"
+                    position="right"
+                    style={{ fontSize: 12, fontWeight: 600, fill: "#000" }}
+                    formatter={(v: number) => fmt(v) + "%"}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      )}
 
       {/* Chart 1 */}
       <section className="rounded-xl border bg-card p-6 shadow-sm">
