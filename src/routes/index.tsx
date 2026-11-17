@@ -8,7 +8,7 @@ import {
 import { ChevronDown } from "lucide-react";
 import { addEntries, addEntry, clearEntries, deleteEntry, listEntries, updateEntry } from "@/lib/entries";
 import {
-  CATEGORIAS, normalizeCategoria, PRODUTOS, normalizeProduto, TURNOS, TURNO_OBRIGATORIO_DESDE, normalizeTurno,
+  CATEGORIAS, normalizeCategoria, PRODUTOS, normalizeProduto, TURNOS, TURNO_OBRIGATORIO_DESDE, normalizeTurno, dispensaTurno,
 } from "@/lib/constants";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -187,11 +187,12 @@ function DataEntry({
   const [produto, setProduto] = useState(PRODUTOS[0]);
   const [qteTon, setQteTon] = useState("");
   const [turno, setTurno] = useState<string>("");
-  const turnoObrigatorio = data >= TURNO_OBRIGATORIO_DESDE;
+  const semTurnoNecessario = dispensaTurno(categoria, produto);
+  const turnoObrigatorio = data >= TURNO_OBRIGATORIO_DESDE && !semTurnoNecessario;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [semTurnoOnly, setSemTurnoOnly] = useState(false);
-  const semTurnoCount = entries.filter((e) => !e.turno).length;
-  const visiveis = semTurnoOnly ? entries.filter((e) => !e.turno) : entries;
+  const semTurnoCount = entries.filter((e) => !e.turno && !dispensaTurno(e.categoria, e.produto)).length;
+  const visiveis = semTurnoOnly ? entries.filter((e) => !e.turno && !dispensaTurno(e.categoria, e.produto)) : entries;
   const fileRef = useRef<HTMLInputElement>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
 
@@ -260,7 +261,7 @@ function DataEntry({
     const n = parseFloat(qteTon.replace(",", "."));
     if (!data || !categoria || !produto || isNaN(n)) return;
     if (turnoObrigatorio && !turno) return;
-    await onAdd({ data, categoria, produto, qteTon: n, turno: turno || null });
+    await onAdd({ data, categoria, produto, qteTon: n, turno: semTurnoNecessario ? null : turno || null });
     setQteTon("");
   }
 
@@ -291,6 +292,9 @@ function DataEntry({
               {PRODUTOS.map((p) => <option key={p}>{p}</option>)}
             </select>
           </Field>
+          {semTurnoNecessario ? (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">Germen não precisa de turno.</p>
+          ) : (
           <Field label={turnoObrigatorio ? "Turno" : "Turno (opcional para datas anteriores a nov/2026)"}>
             <div className="flex gap-2">
               {TURNOS.map((t) => (
@@ -308,6 +312,7 @@ function DataEntry({
             </div>
             {turnoObrigatorio && !turno && <span className="mt-1 block text-[11px] text-destructive">Selecione o turno.</span>}
           </Field>
+          )}
           <Field label="Quantidade (Ton)">
             <input
               type="text" inputMode="decimal" value={qteTon}
@@ -437,7 +442,8 @@ function EditRow({
   const [qte, setQte] = useState(String(entry.qteTon).replace(".", ","));
   const [saving, setSaving] = useState(false);
   const n = parseFloat(qte.replace(",", "."));
-  const faltaTurno = data >= TURNO_OBRIGATORIO_DESDE && !turno;
+  const semTurnoNecessario = dispensaTurno(categoria, produto);
+  const faltaTurno = data >= TURNO_OBRIGATORIO_DESDE && !turno && !semTurnoNecessario;
   const cls = inputCls + " px-2 py-1";
   const categorias = CATEGORIAS.includes(categoria) ? CATEGORIAS : [categoria, ...CATEGORIAS];
   const produtos = PRODUTOS.includes(produto) ? PRODUTOS : [produto, ...PRODUTOS];
@@ -446,7 +452,7 @@ function EditRow({
     if (isNaN(n) || faltaTurno) return;
     setSaving(true);
     try {
-      await onSave({ id: entry.id, data, categoria, produto, qteTon: n, turno: turno || null });
+      await onSave({ id: entry.id, data, categoria, produto, qteTon: n, turno: semTurnoNecessario ? null : turno || null });
     } finally {
       setSaving(false);
     }
@@ -469,7 +475,9 @@ function EditRow({
       </td>
       <td className="py-2 pr-2">
         <select
-          value={turno}
+          value={semTurnoNecessario ? "" : turno}
+          disabled={semTurnoNecessario}
+          title={semTurnoNecessario ? "Germen não precisa de turno" : undefined}
           onChange={(e) => setTurno(e.target.value)}
           className={cls + " w-20" + (faltaTurno ? " border-destructive" : "")}
           autoFocus
@@ -1221,6 +1229,8 @@ function TurnoDashboard({ entries }: { entries: Entry[] }) {
   const filtered = useMemo(
     () =>
       entries.filter((e) => {
+        // Germen não é lançado por turno, então fica fora deste painel
+        if (dispensaTurno(e.categoria, e.produto)) return false;
         if (categoriasSel.length && !categoriasSel.includes(e.categoria)) return false;
         if (dtIni && e.data < dtIni) return false;
         if (dtFim && e.data > dtFim) return false;
@@ -1344,7 +1354,7 @@ function TurnoDashboard({ entries }: { entries: Entry[] }) {
         <div className="flex flex-wrap items-center gap-2 border-t pt-3">
           <span className="text-xs font-semibold uppercase text-muted-foreground">Categoria</span>
           <button onClick={() => setCategoriasSel([])} className={chip(categoriasSel.length === 0)}>Todas</button>
-          {CATEGORIAS.map((c) => (
+          {CATEGORIAS.filter((c) => c !== "Germen").map((c) => (
             <button
               key={c}
               onClick={() => setCategoriasSel((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]))}
@@ -1353,6 +1363,7 @@ function TurnoDashboard({ entries }: { entries: Entry[] }) {
               {c}
             </button>
           ))}
+          <span className="text-[11px] text-muted-foreground">Germen não entra neste painel (não é lançado por turno).</span>
         </div>
       </div>
 

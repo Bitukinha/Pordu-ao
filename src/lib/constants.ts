@@ -39,3 +39,8 @@ export function normalizeTurno(input: unknown): string | null {
   const s = String(input).trim().toUpperCase().replace(/^TURNO\s*/, "");
   return (TURNOS as readonly string[]).includes(s) ? s : null;
 }
+
+// Germen não é lançado por turno: categoria ou produto Germen dispensam o turno.
+export function dispensaTurno(categoria: string, produto: string): boolean {
+  return categoria === "Germen" || produto === "Germen";
+}
