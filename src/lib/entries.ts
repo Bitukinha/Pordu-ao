@@ -4,13 +4,14 @@ import { z } from "zod";
 
 import { db } from "./db/client";
 import { entries as entriesTable } from "./db/schema";
-import { normalizeCategoria, normalizeProduto } from "./constants";
+import { normalizeCategoria, normalizeProduto, normalizeTurno } from "./constants";
 
 const entryInput = z.object({
   data: z.string(),
   categoria: z.string(),
   produto: z.string(),
   qteTon: z.number(),
+  turno: z.string().nullable().optional(),
 });
 
 function toEntry(row: typeof entriesTable.$inferSelect) {
@@ -20,6 +21,7 @@ function toEntry(row: typeof entriesTable.$inferSelect) {
     categoria: normalizeCategoria(row.categoria),
     produto: normalizeProduto(row.produto),
     qteTon: Number(row.qteTon),
+    turno: normalizeTurno(row.turno),
   };
 }
 
@@ -30,10 +32,11 @@ export const listEntries = createServerFn({ method: "GET" }).handler(async () =>
 
 function toRow(entry: z.infer<typeof entryInput>) {
   return {
-    ...entry,
+    data: entry.data,
     categoria: normalizeCategoria(entry.categoria),
     produto: normalizeProduto(entry.produto),
     qteTon: String(entry.qteTon),
+    turno: normalizeTurno(entry.turno),
   };
 }
 
@@ -50,6 +53,14 @@ export const addEntries = createServerFn({ method: "POST" })
     if (data.length === 0) return [];
     const rows = await db.insert(entriesTable).values(data.map(toRow)).returning();
     return rows.map(toEntry);
+  });
+
+export const updateEntry = createServerFn({ method: "POST" })
+  .validator(entryInput.extend({ id: z.string() }))
+  .handler(async ({ data }) => {
+    const { id, ...rest } = data;
+    const [row] = await db.update(entriesTable).set(toRow(rest)).where(eq(entriesTable.id, id)).returning();
+    return toEntry(row);
   });
 
 export const deleteEntry = createServerFn({ method: "POST" })

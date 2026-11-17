@@ -28,3 +28,14 @@ export function normalizeProduto(input: string): string {
   const found = PRODUTOS.find((p) => produtoKey(p) === key);
   return found ?? trimmed;
 }
+
+export const TURNOS = ["A", "B", "C"] as const;
+
+// A partir deste mês todo lançamento precisa ter turno; os anteriores podem ficar sem e ser editados depois.
+export const TURNO_OBRIGATORIO_DESDE = "2026-11-01";
+
+export function normalizeTurno(input: unknown): string | null {
+  if (input == null) return null;
+  const s = String(input).trim().toUpperCase().replace(/^TURNO\s*/, "");
+  return (TURNOS as readonly string[]).includes(s) ? s : null;
+}

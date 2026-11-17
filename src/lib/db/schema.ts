@@ -6,4 +6,6 @@ export const entries = pgTable("entries", {
   categoria: text("categoria").notNull(),
   produto: text("produto").notNull(),
   qteTon: numeric("qte_ton", { precision: 12, scale: 2 }).notNull(),
+  // Turno A, B ou C. Lançamentos antigos (antes de nov/2026) podem estar sem turno (null).
+  turno: text("turno"),
 });

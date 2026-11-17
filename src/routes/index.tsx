@@ -6,8 +6,10 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, Cell, ReferenceLine,
 } from "recharts";
 import { ChevronDown } from "lucide-react";
-import { addEntries, addEntry, clearEntries, deleteEntry, listEntries } from "@/lib/entries";
-import { CATEGORIAS, normalizeCategoria, PRODUTOS, normalizeProduto } from "@/lib/constants";
+import { addEntries, addEntry, clearEntries, deleteEntry, listEntries, updateEntry } from "@/lib/entries";
+import {
+  CATEGORIAS, normalizeCategoria, PRODUTOS, normalizeProduto, TURNOS, TURNO_OBRIGATORIO_DESDE, normalizeTurno,
+} from "@/lib/constants";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,6 +32,7 @@ type Entry = {
   categoria: string;
   produto: string;
   qteTon: number;
+  turno: string | null; // "A" | "B" | "C" | null (lançamentos antigos)
 };
 
 type NewEntry = Omit<Entry, "id">;
@@ -48,6 +51,10 @@ const PRODUTO_PALETTE = [
   "#F2B807", "#3E7CB1", "#E8833A", "#7CB342", "#8FA6A2", "#C0392B", "#9B59B6", "#5DADE2",
   "#16A085", "#D35400", "#F48FB1", "#795548", "#AED581", "#607D8B", "#FFD54F", "#4DB6AC",
 ];
+const TURNO_COLORS: Record<string, string> = { A: "#3E7CB1", B: "#F2B807", C: "#7CB342", "Sem turno": "#B0B0B0" };
+const SEM_TURNO = "Sem turno";
+const turnoLabel = (t: string | null) => t ?? SEM_TURNO;
+
 const DATE_PALETTE = ["#3E7CB1", "#E8833A", "#8FA6A2", "#F2B807", "#5DADE2", "#7CB342", "#C0392B", "#9B59B6"];
 
 function fmt(n: number) {
@@ -55,7 +62,7 @@ function fmt(n: number) {
 }
 
 function App() {
-  const [tab, setTab] = useState<"dashboard" | "dados">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "turnos" | "dados">("dashboard");
   const queryClient = useQueryClient();
 
   const { data: entries = [], isLoading } = useQuery({
@@ -73,6 +80,10 @@ function App() {
   });
   const addManyMutation = useMutation({
     mutationFn: (entries: NewEntry[]) => addEntries({ data: entries }),
+    onSuccess: invalidate,
+  });
+  const updateMutation = useMutation({
+    mutationFn: (entry: Entry) => updateEntry({ data: entry }),
     onSuccess: invalidate,
   });
   const removeMutation = useMutation({
@@ -93,7 +104,7 @@ function App() {
             <span className="hidden text-xs text-muted-foreground sm:inline">Controle de Produção Diária</span>
           </div>
           <nav className="flex gap-1 rounded-lg bg-muted p-1">
-            {(["dashboard", "dados"] as const).map((t) => (
+            {(["dashboard", "turnos", "dados"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -101,7 +112,7 @@ function App() {
                   tab === t ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {t === "dashboard" ? "Indicadores" : "Lançar Dados"}
+                {t === "dashboard" ? "Indicadores" : t === "turnos" ? "Por Turno" : "Lançar Dados"}
               </button>
             ))}
           </nav>
@@ -113,11 +124,14 @@ function App() {
           <p className="py-12 text-center text-sm text-muted-foreground">Carregando...</p>
         ) : tab === "dashboard" ? (
           <Dashboard entries={entries} />
+        ) : tab === "turnos" ? (
+          <TurnoDashboard entries={entries} />
         ) : (
           <DataEntry
             entries={entries}
             onAdd={(entry) => addMutation.mutateAsync(entry)}
             onImport={(imported) => addManyMutation.mutateAsync(imported)}
+            onUpdate={(entry) => updateMutation.mutateAsync(entry)}
             onRemove={(id) => removeMutation.mutateAsync(id)}
             onClear={() => clearMutation.mutateAsync()}
           />
@@ -141,10 +155,11 @@ function exportXlsx(entries: Entry[]) {
       Data: new Date(e.data + "T00:00"),
       Categoria: e.categoria,
       Produto: e.produto,
+      Turno: e.turno ?? "",
       "Qte Ton": e.qteTon,
     }));
   const ws = XLSX.utils.json_to_sheet(rows, { cellDates: true });
-  ws["!cols"] = [{ wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 12 }];
+  ws["!cols"] = [{ wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 8 }, { wch: 12 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Dados");
   XLSX.writeFile(wb, `nutrimilho-producao-${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -155,12 +170,14 @@ function DataEntry({
   entries,
   onAdd,
   onImport,
+  onUpdate,
   onRemove,
   onClear,
 }: {
   entries: Entry[];
   onAdd: (entry: NewEntry) => Promise<unknown>;
   onImport: (entries: NewEntry[]) => Promise<unknown>;
+  onUpdate: (entry: Entry) => Promise<unknown>;
   onRemove: (id: string) => Promise<unknown>;
   onClear: () => Promise<unknown>;
 }) {
@@ -169,6 +186,12 @@ function DataEntry({
   const [categoria, setCategoria] = useState(CATEGORIAS[0]);
   const [produto, setProduto] = useState(PRODUTOS[0]);
   const [qteTon, setQteTon] = useState("");
+  const [turno, setTurno] = useState<string>("");
+  const turnoObrigatorio = data >= TURNO_OBRIGATORIO_DESDE;
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [semTurnoOnly, setSemTurnoOnly] = useState(false);
+  const semTurnoCount = entries.filter((e) => !e.turno).length;
+  const visiveis = semTurnoOnly ? entries.filter((e) => !e.turno) : entries;
   const fileRef = useRef<HTMLInputElement>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
 
@@ -202,6 +225,7 @@ function DataEntry({
         const d = pick(r, ["data", "dt", "dia"]);
         const cat = pick(r, ["categoria", "cat"]);
         const prod = pick(r, ["produto"]);
+        const t = pick(r, ["turno"]);
         const q = pick(r, ["qte ton", "qtd ton", "quantidade", "qte_ton", "qte", "qtd"]);
         if (d == null || !cat || !prod || q == null || isNaN(Number(q))) { skipped++; continue; }
         let iso: string;
@@ -220,6 +244,7 @@ function DataEntry({
           categoria: normalizeCategoria(String(cat)),
           produto: normalizeProduto(String(prod)),
           qteTon: Number(q),
+          turno: normalizeTurno(t),
         });
       }
       await onImport(imported);
@@ -234,7 +259,8 @@ function DataEntry({
     e.preventDefault();
     const n = parseFloat(qteTon.replace(",", "."));
     if (!data || !categoria || !produto || isNaN(n)) return;
-    await onAdd({ data, categoria, produto, qteTon: n });
+    if (turnoObrigatorio && !turno) return;
+    await onAdd({ data, categoria, produto, qteTon: n, turno: turno || null });
     setQteTon("");
   }
 
@@ -265,6 +291,23 @@ function DataEntry({
               {PRODUTOS.map((p) => <option key={p}>{p}</option>)}
             </select>
           </Field>
+          <Field label={turnoObrigatorio ? "Turno" : "Turno (opcional para datas anteriores a nov/2026)"}>
+            <div className="flex gap-2">
+              {TURNOS.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTurno(turno === t ? "" : t)}
+                  className={`flex-1 rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                    turno === t ? "border-primary bg-primary text-primary-foreground" : "border-input bg-white hover:border-primary"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            {turnoObrigatorio && !turno && <span className="mt-1 block text-[11px] text-destructive">Selecione o turno.</span>}
+          </Field>
           <Field label="Quantidade (Ton)">
             <input
               type="text" inputMode="decimal" value={qteTon}
@@ -272,7 +315,11 @@ function DataEntry({
               placeholder="0,00" className={inputCls} required
             />
           </Field>
-          <button type="submit" className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90">
+          <button
+            type="submit"
+            disabled={turnoObrigatorio && !turno}
+            className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
             Adicionar Lançamento
           </button>
         </form>
@@ -286,7 +333,7 @@ function DataEntry({
             onChange={(e) => e.target.files?.[0] && importXlsx(e.target.files[0])}
             className="block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-brand-leaf file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:opacity-90"
           />
-          <p className="mt-2 text-[11px] text-muted-foreground">Lê a aba <strong>Dados</strong> (colunas: Data, Categoria, Produto, Qte Ton).</p>
+          <p className="mt-2 text-[11px] text-muted-foreground">Lê a aba <strong>Dados</strong> (colunas: Data, Categoria, Produto, Turno, Qte Ton).</p>
           {importMsg && <p className="mt-2 text-xs text-foreground">{importMsg}</p>}
           {entries.length > 0 && (
             <div className="mt-4 flex flex-col gap-2 border-t pt-4">
@@ -305,7 +352,15 @@ function DataEntry({
 
 
       <section className="rounded-xl border bg-card p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold">Lançamentos ({entries.length})</h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold">Lançamentos ({visiveis.length})</h2>
+          {semTurnoCount > 0 && (
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+              <Checkbox checked={semTurnoOnly} onCheckedChange={(v) => setSemTurnoOnly(v === true)} />
+              Mostrar só sem turno ({semTurnoCount})
+            </label>
+          )}
+        </div>
         {entries.length === 0 ? (
           <p className="py-12 text-center text-sm text-muted-foreground">Nenhum lançamento ainda.</p>
         ) : (
@@ -316,30 +371,127 @@ function DataEntry({
                   <th className="py-2 pr-4">Data</th>
                   <th className="py-2 pr-4">Categoria</th>
                   <th className="py-2 pr-4">Produto</th>
+                  <th className="py-2 pr-4">Turno</th>
                   <th className="py-2 pr-4 text-right">Qte (Ton)</th>
                   <th className="py-2"></th>
                 </tr>
               </thead>
               <tbody>
-                {entries.map((e) => (
-                  <tr key={e.id} className="border-b last:border-0 hover:bg-muted/50">
-                    <td className="py-2 pr-4">{new Date(e.data + "T00:00").toLocaleDateString("pt-BR")}</td>
-                    <td className="py-2 pr-4">
-                      <span className="inline-block h-2 w-2 rounded-full" style={{ background: CAT_COLORS[e.categoria] || "#999" }} /> {e.categoria}
-                    </td>
-                    <td className="py-2 pr-4">{e.produto}</td>
-                    <td className="py-2 pr-4 text-right font-medium tabular-nums">{fmt(e.qteTon)}</td>
-                    <td className="py-2 text-right">
-                      <button onClick={() => remove(e.id)} className="text-xs text-destructive hover:underline">Excluir</button>
-                    </td>
-                  </tr>
-                ))}
+                {visiveis.map((e) =>
+                  editingId === e.id ? (
+                    <EditRow
+                      key={e.id}
+                      entry={e}
+                      onCancel={() => setEditingId(null)}
+                      onSave={async (upd) => {
+                        await onUpdate(upd);
+                        setEditingId(null);
+                      }}
+                    />
+                  ) : (
+                    <tr key={e.id} className="border-b last:border-0 hover:bg-muted/50">
+                      <td className="py-2 pr-4">{new Date(e.data + "T00:00").toLocaleDateString("pt-BR")}</td>
+                      <td className="py-2 pr-4">
+                        <span className="inline-block h-2 w-2 rounded-full" style={{ background: CAT_COLORS[e.categoria] || "#999" }} /> {e.categoria}
+                      </td>
+                      <td className="py-2 pr-4">{e.produto}</td>
+                      <td className="py-2 pr-4">
+                        {e.turno ? (
+                          <span className="inline-block rounded px-2 py-0.5 text-xs font-semibold text-white" style={{ background: TURNO_COLORS[e.turno] }}>
+                            {e.turno}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 pr-4 text-right font-medium tabular-nums">{fmt(e.qteTon)}</td>
+                      <td className="whitespace-nowrap py-2 text-right">
+                        <button onClick={() => setEditingId(e.id)} className="mr-3 text-xs text-primary hover:underline">Editar</button>
+                        <button onClick={() => remove(e.id)} className="text-xs text-destructive hover:underline">Excluir</button>
+                      </td>
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>
         )}
       </section>
     </div>
+  );
+}
+
+function EditRow({
+  entry,
+  onSave,
+  onCancel,
+}: {
+  entry: Entry;
+  onSave: (entry: Entry) => Promise<unknown>;
+  onCancel: () => void;
+}) {
+  const [data, setData] = useState(entry.data);
+  const [categoria, setCategoria] = useState(entry.categoria);
+  const [produto, setProduto] = useState(entry.produto);
+  const [turno, setTurno] = useState(entry.turno ?? "");
+  const [qte, setQte] = useState(String(entry.qteTon).replace(".", ","));
+  const [saving, setSaving] = useState(false);
+  const n = parseFloat(qte.replace(",", "."));
+  const faltaTurno = data >= TURNO_OBRIGATORIO_DESDE && !turno;
+  const cls = inputCls + " px-2 py-1";
+  const categorias = CATEGORIAS.includes(categoria) ? CATEGORIAS : [categoria, ...CATEGORIAS];
+  const produtos = PRODUTOS.includes(produto) ? PRODUTOS : [produto, ...PRODUTOS];
+
+  async function save() {
+    if (isNaN(n) || faltaTurno) return;
+    setSaving(true);
+    try {
+      await onSave({ id: entry.id, data, categoria, produto, qteTon: n, turno: turno || null });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <tr className="border-b bg-muted/40 last:border-0">
+      <td className="py-2 pr-2">
+        <input type="date" value={data} onChange={(e) => setData(e.target.value)} className={cls + " w-36"} />
+      </td>
+      <td className="py-2 pr-2">
+        <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className={cls}>
+          {categorias.map((c) => <option key={c}>{c}</option>)}
+        </select>
+      </td>
+      <td className="py-2 pr-2">
+        <select value={produto} onChange={(e) => setProduto(e.target.value)} className={cls}>
+          {produtos.map((p) => <option key={p}>{p}</option>)}
+        </select>
+      </td>
+      <td className="py-2 pr-2">
+        <select
+          value={turno}
+          onChange={(e) => setTurno(e.target.value)}
+          className={cls + " w-20" + (faltaTurno ? " border-destructive" : "")}
+          autoFocus
+        >
+          <option value="">—</option>
+          {TURNOS.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </td>
+      <td className="py-2 pr-2">
+        <input type="text" inputMode="decimal" value={qte} onChange={(e) => setQte(e.target.value)} className={cls + " w-24 text-right"} />
+      </td>
+      <td className="whitespace-nowrap py-2 text-right">
+        <button
+          onClick={save}
+          disabled={saving || isNaN(n) || faltaTurno}
+          className="mr-3 text-xs font-semibold text-primary hover:underline disabled:opacity-50"
+        >
+          {saving ? "Salvando..." : "Salvar"}
+        </button>
+        <button onClick={onCancel} className="text-xs text-muted-foreground hover:underline">Cancelar</button>
+      </td>
+    </tr>
   );
 }
 
@@ -1044,6 +1196,292 @@ function Dashboard({ entries }: { entries: Entry[] }) {
           </ResponsiveContainer>
         </div>
       </section>
+    </div>
+  );
+}
+
+/* -------------------- DASHBOARD POR TURNO -------------------- */
+function TurnoDashboard({ entries }: { entries: Entry[] }) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const seteDiasAtras = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+  const inicioMes = hoje.slice(0, 8) + "01";
+  const inicioAno = hoje.slice(0, 4) + "-01-01";
+
+  const [dtIni, setDtIni] = useState(seteDiasAtras);
+  const [dtFim, setDtFim] = useState(hoje);
+  const [categoriasSel, setCategoriasSel] = useState<string[]>([]);
+
+  const presets = [
+    { label: "Diária", ini: hoje },
+    { label: "Últimos 7 dias", ini: seteDiasAtras },
+    { label: "Mensal", ini: inicioMes },
+    { label: "Anual", ini: inicioAno },
+  ];
+
+  const filtered = useMemo(
+    () =>
+      entries.filter((e) => {
+        if (categoriasSel.length && !categoriasSel.includes(e.categoria)) return false;
+        if (dtIni && e.data < dtIni) return false;
+        if (dtFim && e.data > dtFim) return false;
+        return true;
+      }),
+    [entries, categoriasSel, dtIni, dtFim]
+  );
+
+  // Turnos que aparecem no período (Sem turno só entra se houver lançamento antigo sem turno)
+  const turnos = useMemo(() => {
+    const list: string[] = [...TURNOS];
+    if (filtered.some((e) => !e.turno)) list.push(SEM_TURNO);
+    return list;
+  }, [filtered]);
+
+  const dias = useMemo(() => Array.from(new Set(filtered.map((e) => e.data))).sort(), [filtered]);
+
+  const resumo = useMemo(() => {
+    const total = filtered.reduce((s, e) => s + e.qteTon, 0);
+    return turnos.map((t) => {
+      const doTurno = filtered.filter((e) => turnoLabel(e.turno) === t);
+      const soma = doTurno.reduce((s, e) => s + e.qteTon, 0);
+      const porDia = new Map<string, number>();
+      for (const e of doTurno) porDia.set(e.data, (porDia.get(e.data) ?? 0) + e.qteTon);
+      let recorde = 0;
+      let dataRecorde = "";
+      for (const [d, v] of porDia) if (v > recorde) { recorde = v; dataRecorde = d; }
+      return {
+        turno: t,
+        total: soma,
+        pct: total > 0 ? (soma / total) * 100 : 0,
+        media: porDia.size ? soma / porDia.size : 0,
+        dias: porDia.size,
+        recorde,
+        dataRecorde,
+      };
+    });
+  }, [filtered, turnos]);
+
+  // Produção diária: barras agrupadas por data, uma por turno
+  const porDia = useMemo(
+    () =>
+      dias.map((d) => {
+        const row: Record<string, string | number> = { data: d };
+        for (const e of filtered) {
+          if (e.data !== d) continue;
+          const t = turnoLabel(e.turno);
+          row[t] = ((row[t] as number) ?? 0) + e.qteTon;
+        }
+        return row;
+      }),
+    [filtered, dias]
+  );
+
+  // Produção por turno empilhada por categoria
+  const porCategoria = useMemo(
+    () =>
+      turnos.map((t) => {
+        const row: Record<string, string | number> = { turno: t };
+        let total = 0;
+        for (const e of filtered) {
+          if (turnoLabel(e.turno) !== t) continue;
+          row[e.categoria] = ((row[e.categoria] as number) ?? 0) + e.qteTon;
+          total += e.qteTon;
+        }
+        row.__total = total;
+        return row;
+      }),
+    [filtered, turnos]
+  );
+  const catsAtivas = CATEGORIAS.filter((c) => porCategoria.some((r) => r[c]));
+
+  // Tabela produto × turno
+  const porProduto = useMemo(() => {
+    const map = new Map<string, Record<string, number>>();
+    for (const e of filtered) {
+      const key = `${e.categoria}||${e.produto}`;
+      const row = map.get(key) ?? {};
+      const t = turnoLabel(e.turno);
+      row[t] = (row[t] ?? 0) + e.qteTon;
+      row.__total = (row.__total ?? 0) + e.qteTon;
+      map.set(key, row);
+    }
+    return Array.from(map.entries())
+      .map(([key, vals]) => {
+        const [categoria, produto] = key.split("||");
+        return { categoria, produto, vals };
+      })
+      .sort((a, b) => b.vals.__total - a.vals.__total);
+  }, [filtered]);
+
+  const totalGeral = resumo.reduce((s, r) => s + r.total, 0);
+  const semTurnoQtd = filtered.filter((e) => !e.turno).length;
+  const dataBR = (v: string) => new Date(v + "T00:00").toLocaleDateString("pt-BR");
+  const btn = (on: boolean) =>
+    `rounded-md px-3 py-1 text-xs font-medium transition ${on ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`;
+  const chip = (on: boolean) =>
+    `rounded-full px-3 py-1 text-xs font-medium transition ${on ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`;
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase text-muted-foreground">Período rápido</span>
+          {presets.map((p) => (
+            <button key={p.label} onClick={() => { setDtIni(p.ini); setDtFim(hoje); }} className={btn(dtIni === p.ini && dtFim === hoje)}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-xs text-muted-foreground">De</span>
+            <input type="date" value={dtIni} onChange={(e) => setDtIni(e.target.value)} className={inputCls + " w-40"} />
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-xs text-muted-foreground">Até</span>
+            <input type="date" value={dtFim} onChange={(e) => setDtFim(e.target.value)} className={inputCls + " w-40"} />
+          </label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+          <span className="text-xs font-semibold uppercase text-muted-foreground">Categoria</span>
+          <button onClick={() => setCategoriasSel([])} className={chip(categoriasSel.length === 0)}>Todas</button>
+          {CATEGORIAS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCategoriasSel((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]))}
+              className={chip(categoriasSel.includes(c))}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {semTurnoQtd > 0 && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+          {semTurnoQtd} lançamento(s) deste período estão sem turno e aparecem como "{SEM_TURNO}". Edite-os em <strong>Lançar Dados</strong> para incluir o turno.
+        </p>
+      )}
+
+      {filtered.length === 0 ? (
+        <div className="rounded-xl border-2 border-dashed bg-card p-16 text-center">
+          <p className="text-sm text-muted-foreground">Nenhum lançamento no período selecionado.</p>
+        </div>
+      ) : (
+        <>
+          <div className={`grid gap-4 sm:grid-cols-2 ${turnos.length > 3 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+            {resumo.map((r) => (
+              <div key={r.turno} className="overflow-hidden rounded-xl border bg-card shadow-sm">
+                <div className="h-1" style={{ background: TURNO_COLORS[r.turno] }} />
+                <div className="p-5">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {r.turno === SEM_TURNO ? SEM_TURNO : `Turno ${r.turno}`}
+                  </p>
+                  <p className="mt-1 text-4xl font-bold tabular-nums text-foreground">{fmt(r.total)}</p>
+                  <p className="text-xs text-muted-foreground">Ton · {fmt(r.pct)}% do total</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Média/dia</p>
+                      <p className="font-semibold tabular-nums">{fmt(r.media)} Ton</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Melhor dia</p>
+                      <p className="font-semibold tabular-nums">{r.recorde ? `${fmt(r.recorde)} (${dataBR(r.dataRecorde).slice(0, 5)})` : "—"}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <section className="rounded-xl border bg-card p-6 shadow-sm">
+            <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
+            <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Produção Diária por Turno</h2>
+            <p className="mb-4 text-center text-xs text-muted-foreground">Cada cor representa um turno · Total do período: {fmt(totalGeral)} Ton</p>
+            <div className="w-full overflow-x-auto">
+              <div style={{ minWidth: Math.max(760, dias.length * turnos.length * 34), height: 420 }}>
+                <ResponsiveContainer>
+                  <BarChart data={porDia} margin={{ top: 28, right: 16, left: 0, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                    <XAxis dataKey="data" tick={{ fontSize: 12, fill: "#000" }} tickFormatter={dataBR} />
+                    <YAxis tick={{ fontSize: 12, fill: "#000" }} />
+                    <Tooltip formatter={(v: number) => fmt(v) + " Ton"} labelFormatter={(v) => dataBR(String(v))} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v) => (v === SEM_TURNO ? v : `Turno ${v}`)} />
+                    {turnos.map((t) => (
+                      <Bar key={t} dataKey={t} fill={TURNO_COLORS[t]}>
+                        <LabelList dataKey={t} position="top" style={{ fontSize: 11, fontWeight: 600, fill: "#000" }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                      </Bar>
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-xl border bg-card p-6 shadow-sm">
+            <img src={logo} alt="Nutrimilho" className="mx-auto mb-3 h-8 w-auto" />
+            <h2 className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-foreground">Total por Turno e Categoria</h2>
+            <p className="mb-4 text-center text-xs text-muted-foreground">Soma do período selecionado</p>
+            <div style={{ width: "100%", height: 400 }}>
+              <ResponsiveContainer>
+                <BarChart data={porCategoria} margin={{ top: 34, right: 16, left: 0, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                  <XAxis dataKey="turno" tick={{ fontSize: 13, fill: "#000", fontWeight: 600 }} tickFormatter={(v) => (v === SEM_TURNO ? v : `Turno ${v}`)} />
+                  <YAxis tick={{ fontSize: 12, fill: "#000" }} />
+                  <Tooltip formatter={(v: number) => fmt(v) + " Ton"} labelFormatter={(v) => (v === SEM_TURNO ? v : `Turno ${v}`)} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  {catsAtivas.map((c) => (
+                    <Bar key={c} dataKey={c} stackId="a" fill={CAT_COLORS[c]} maxBarSize={120}>
+                      <LabelList dataKey={c} position="center" style={{ fontSize: 12, fill: "#000" }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                    </Bar>
+                  ))}
+                  <Bar dataKey="__total" fill="transparent" legendType="none" maxBarSize={120}>
+                    <LabelList dataKey="__total" position="top" style={{ fontSize: 13, fontWeight: 700, fill: "#000" }} formatter={(v: number) => (v ? fmt(v) : "")} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+
+          <section className="rounded-xl border bg-card p-6 shadow-sm">
+            <h2 className="mb-4 text-center text-lg font-bold uppercase tracking-wide text-foreground">Produto × Turno (Ton)</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                    <th className="py-2 pr-4">Categoria</th>
+                    <th className="py-2 pr-4">Produto</th>
+                    {turnos.map((t) => (
+                      <th key={t} className="py-2 pr-4 text-right">{t === SEM_TURNO ? t : `Turno ${t}`}</th>
+                    ))}
+                    <th className="py-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {porProduto.map((r) => (
+                    <tr key={r.categoria + r.produto} className="border-b last:border-0 hover:bg-muted/50">
+                      <td className="py-2 pr-4">
+                        <span className="inline-block h-2 w-2 rounded-full" style={{ background: CAT_COLORS[r.categoria] || "#999" }} /> {r.categoria}
+                      </td>
+                      <td className="py-2 pr-4">{r.produto}</td>
+                      {turnos.map((t) => (
+                        <td key={t} className="py-2 pr-4 text-right tabular-nums">{r.vals[t] ? fmt(r.vals[t]) : "—"}</td>
+                      ))}
+                      <td className="py-2 text-right font-semibold tabular-nums">{fmt(r.vals.__total)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 font-semibold">
+                    <td className="py-2 pr-4" colSpan={2}>Total</td>
+                    {resumo.map((r) => (
+                      <td key={r.turno} className="py-2 pr-4 text-right tabular-nums">{fmt(r.total)}</td>
+                    ))}
+                    <td className="py-2 text-right tabular-nums">{fmt(totalGeral)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }
